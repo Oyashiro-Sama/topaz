@@ -29,6 +29,8 @@ set(SOURCES
     petutils.h
     puppetutils.cpp
     puppetutils.h
+    serverutils.cpp
+    serverutils.h
     synthutils.cpp
     synthutils.h
     zoneutils.cpp

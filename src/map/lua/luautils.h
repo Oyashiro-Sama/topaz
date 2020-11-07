@@ -41,6 +41,7 @@
 #include "lua_trade_container.h"
 #include "lua_zone.h"
 #include "lua_item.h"
+#include "../utils/fishingutils.h"
 
 /************************************************************************
 *                                                                       *
@@ -190,7 +191,15 @@ namespace luautils
     int32 OnTransportEvent(CCharEntity* PChar, uint32 TransportID);
     int32 OnTimeTrigger(CNpcEntity* PNpc, uint8 triggerID);
     int32 OnConquestUpdate(CZone* PZone, ConquestUpdate type);                  // hourly conquest update
-
+    fishoverridesys_t * OnFishingStart(CCharEntity * PChar, rod_t * Rod, bait_t * Bait, uint8 AreaID); // triggers when player starts fishing in a zone
+    fishoverridepool_t * OnFishingCheck(CCharEntity * PChar, rod_t * Rod, bait_t * Bait, uint8 AreaID); // fishing process hook check
+    reeloverride_t * OnFishingReel(CCharEntity * PChar, fishresponse_t * Response); // fishing process reel in
+    int32 OnFishingEnd(CCharEntity * PChar, fishresponse_t * Response);           // triggers when player stops fishing
+    int32 GetFishers(lua_State * L);                                             // Get Fisher List
+    int32 GetFishRankingInformation(lua_State * L);                              // Get Fish Ranking Information
+    int32 UpdateFishRankingConfiguration(lua_State * L);                         // Update Fish Ranking Configuration
+    int32 AdvanceFishRankingPeriod(lua_State * L);                               // Advance fish ranking period
+    int32 GetCurrentFishRankingScore(lua_State * L);                             // Get current character submitted fish ranking score
     int32 OnTrigger(CCharEntity* PChar, CBaseEntity* PNpc);                     // triggered when user targets npc and clicks action button
     int32 OnEventUpdate(CCharEntity* PChar, uint16 eventID, uint32 result, uint16 extras); // triggered when game triggers event update during cutscene with extra parameters (battlefield)
     int32 OnEventUpdate(CCharEntity* PChar, uint16 eventID, uint32 result);     // triggered when game triggers event update during cutscene
