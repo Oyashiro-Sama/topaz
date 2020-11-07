@@ -202,6 +202,10 @@ namespace charutils
     bool    AddWeaponSkillPoints(CCharEntity*, SLOTTYPE, int);
 
     int32   GetCharVar(CCharEntity* PChar, const char* var);
+    void    AddCharVar(CCharEntity * PChar, const char* var, int32 value);
+    void    SetCharVar(CCharEntity * PChar, const char* var, int32 value);
+
+    uint8   getQuestStatus(CCharEntity * PChar, uint8 log, uint8 quest);
 
     uint16 getWideScanRange(JOBTYPE job, uint8 level);
     uint16 getWideScanRange(CCharEntity* PChar);

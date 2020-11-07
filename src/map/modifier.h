@@ -814,6 +814,9 @@ enum class Mod
     // SPARE = 977, // stuff
     // SPARE = 978, // stuff
     // SPARE = 979, // stuff
+    PENGUIN_RING_EFFECT = 1000, // +2 on fishing arrow delay / fish movement for mini - game
+    ALBATROSS_RING_EFFECT = 1001, // adds 30 seconds to mini - game time
+    PELICAN_RING_EFFECT = 1002, // adds extra skillup roll for fishing
 };
 
 //temporary workaround for using enum class as unordered_map key until compilers support it

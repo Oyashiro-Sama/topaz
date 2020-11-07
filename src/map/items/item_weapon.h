@@ -71,6 +71,7 @@ public:
     void    setMaxHit(uint8 hit);
 	void    setUnlockablePoints(uint16 points);
     void    setCurrentUnlockPoints(uint16 points);
+    void    setRodNumber(uint16 number);
 
 private:
 

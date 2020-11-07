@@ -33,6 +33,7 @@ along with this program.  If not, see http://www.gnu.org/licenses/
 
 #include "battleentity.h"
 #include "petentity.h"
+#include "../utils/fishingutils.h"
 
 #define MAX_QUESTAREA	 11
 #define MAX_QUESTID     256
@@ -336,6 +337,13 @@ public:
     uint32 GetPlayTime(bool needUpdate = true);		// Get playtime
 
     CItemEquipment*	getEquip(SLOTTYPE slot);
+    
+    fishresponse_t* hookedFish; // Currently hooked fish/item/monster
+    uint32 nextFishTime;        // When char is allowed to fish again
+    uint32 lastCastTime;        // When char last cast their rod
+    uint32 fishingToken;        // To track fishing process
+    CItemFish* fishForRanking;  // Current fish being ranked
+    uint16 hookDelay;           // How long it takes to hook a fish
 
     void        ReloadPartyInc();
     void        ReloadPartyDec();

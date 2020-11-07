@@ -1,4 +1,5 @@
 ﻿#include <random>
+#include <deque>
 
 class tpzrand
 {
@@ -22,9 +23,7 @@ public:
     // @param min
     // @param max
     // @returns result
-    template <typename T>
-    static inline typename std::enable_if<std::is_integral<T>::value, T>::type
-    GetRandomNumber(T min, T max)
+    template <typename T> static inline typename std::enable_if<std::is_integral<T>::value, T>::type GetRandomNumber(T min, T max)
     {
         if (min == max - 1 || max == min)
         {
@@ -34,9 +33,7 @@ public:
         return dist(mt());
     }
 
-    template<typename T>
-    static inline typename std::enable_if<std::is_floating_point<T>::value, T>::type
-    GetRandomNumber(T min, T max)
+    template <typename T> static inline typename std::enable_if<std::is_floating_point<T>::value, T>::type GetRandomNumber(T min, T max)
     {
         if (min == max)
         {
@@ -50,11 +47,20 @@ public:
     // @param min
     // @param max
     // @returns result
-    template <typename T>
-    static inline T GetRandomNumber(T max)
+    template <typename T> static inline T GetRandomNumber(T max)
     {
         return GetRandomNumber<T>(0, max);
     }
+
+    /*Gets a random element from the given deque
+    @param deque deque to get a random element from
+    @returns deque
+    */
+    template <typename T> static inline T GetRandomElement(std::deque<T>* deque)
+    {
+        return deque->at(GetRandomNumber<uint32>(0, deque->size() - 1));
+    }
+
 
     // Gets a random element from the given stl-like container (container must have members: at() and size()).
     // @param container
