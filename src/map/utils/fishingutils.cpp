@@ -19,8 +19,10 @@
 ===========================================================================
 */
 
-#include <math.h>
-#include <string.h>
+#include "fishingutils.h"
+
+#include <cmath>
+#include <cstring>
 
 #include "../packets/caught_fish.h"
 #include "../packets/caught_monster.h"
@@ -29,37 +31,30 @@
 #include "../packets/char_update.h"
 #include "../packets/chat_message.h"
 #include "../packets/entity_animation.h"
-#include "../packets/entity_update.h"
 #include "../packets/event.h"
 #include "../packets/fishing.h"
 #include "../packets/inventory_finish.h"
 #include "../packets/inventory_item.h"
-#include "../packets/message_name.h"
 #include "../packets/message_special.h"
 #include "../packets/message_system.h"
 #include "../packets/message_text.h"
 #include "../packets/release.h"
+
 #include "../entities/battleentity.h"
 #include "../entities/mobentity.h"
 #include "../entities/npcentity.h"
-#include "../../common/showmsg.h"
+
 #include "../ai/ai_container.h"
+
 #include "../enmity_container.h"
-#include "../items/item_fish.h"
-#include "../lua/luautils.h"
 #include "../item_container.h"
-#include "../map.h"
 #include "../mob_modifier.h"
-#include "../modifier.h"
-#include "../navmesh.h"
-#include "../status_effect.h"
 #include "../status_effect_container.h"
 #include "../trade_container.h"
 #include "../universal_container.h"
-#include "../vana_time.h"
+
 #include "battleutils.h"
 #include "charutils.h"
-#include "fishingutils.h"
 #include "itemutils.h"
 #include "serverutils.h"
 #include "zoneutils.h"
@@ -68,24 +63,19 @@ namespace fishingutils
 {
     uint16 MessageOffset[MAX_ZONEID];
     fishing_area_pool FishingPools[MAX_ZONEID];
-    std::map<uint8, fish_ranking_result> * fish_rankings;
+    std::map<uint8, fish_ranking_result>* fish_rankings;
     std::map<uint32, fish_t*> FishList;
     std::map<uint16, rod_t*> FishingRods;
     std::map<uint16, bait_t*> FishingBaits;
-    std::map<uint16, std::map<uint32, fishmob_t*>>
-    FishZoneMobList; // zoneid, mobid, mob
-    std::map<uint16, std::map<uint8, fishingarea_t*>>
-    FishingAreaList; // zoneid, areaid, area
-    std::map<uint16, std::map<uint8, uint16>>
-    FishingCatchLists; // zoneid, areaid, groupid
-    std::map<uint16, std::map<uint32, uint16>>
-    FishingGroups; // groupid, fishid, rarity
-    std::map<uint16, std::map<uint32, uint8>>
-    FishingBaitAffinities; // baitid, fishid, power
-    std::deque<uint32> * contest_fish;
+    std::map<uint16, std::map<uint32, fishmob_t*>> FishZoneMobList; // zoneid, mobid, mob
+    std::map<uint16, std::map<uint8, fishingarea_t*>> FishingAreaList; // zoneid, areaid, area
+    std::map<uint16, std::map<uint8, uint16>> FishingCatchLists; // zoneid, areaid, groupid
+    std::map<uint16, std::map<uint32, uint16>> FishingGroups; // groupid, fishid, rarity
+    std::map<uint16, std::map<uint32, uint8>> FishingBaitAffinities; // baitid, fishid, power
+    std::deque<uint32>* contest_fish;
     fish_ranking_contest_info FishRankingContestInfo;
 
-uint32 HandleFishingAction(CCharEntity * PChar, CBasicPacket data)
+uint32 HandleFishingAction(CCharEntity* PChar, CBasicPacket data)
 {
     uint16 stamina = data.ref<uint16>(0x08);
     uint8 action = data.ref<uint8>(0x0E);
@@ -105,6 +95,7 @@ void ReduceFishPool(uint16 zoneId, uint8 areaId, uint16 fishId)
     {
         return;
     }
+
     if (FishingPools[zoneId].catchPools.count(areaId) && FishingPools[zoneId].catchPools[areaId].stock.count(fishId))
     {
         uint16 qty = FishingPools[zoneId].catchPools[areaId].stock[fishId].quantity;
@@ -117,9 +108,9 @@ void ReduceFishPool(uint16 zoneId, uint8 areaId, uint16 fishId)
 
 void RestockFishingAreas()
 {
-    for (uint16 zoneId = 0; zoneId < MAX_ZONEID; zoneId++)
+    for (auto& FishingPool : FishingPools)
     {
-        for (auto const& a : FishingPools[zoneId].catchPools)
+        for (auto const& a : FishingPool.catchPools)
         {
             for (auto const& s : a.second.stock)
             {
@@ -128,7 +119,7 @@ void RestockFishingAreas()
                     int qty = s.second.quantity;
                     int maxqty = s.second.maxQuantity;
                     int restock = s.second.restockRate;
-                    FishingPools[zoneId].catchPools[a.first].stock[s.first].quantity = std::min(maxqty, qty + restock);
+                    FishingPool.catchPools[a.first].stock[s.first].quantity = std::min(maxqty, qty + restock);
                 }
             }
         }
@@ -165,7 +156,7 @@ void CreateFishingPools()
 ************************************************************************/
 uint32 GetSundayMidnightTimestamp()
 {
-    uint32 timestamp = (uint32)time(NULL);
+    uint32 timestamp = (uint32)time(nullptr);
     uint32 day = 6 - CVanaTime::getInstance()->getSysWeekDay();
     uint32 hour = 23 - CVanaTime::getInstance()->getSysHour();
     uint32 mins = 59 - CVanaTime::getInstance()->getSysMinute();
@@ -196,7 +187,7 @@ uint8 GetMoonPhase()
     return 0;
 }
 
-uint16 GetHookTime(CCharEntity * PChar)
+uint16 GetHookTime(CCharEntity* PChar)
 {
     uint16 waitTime = 13;
     uint8 moonPhase = GetMoonPhase();
@@ -217,7 +208,7 @@ uint16 GetHookTime(CCharEntity * PChar)
     return std::max<uint16>(7, waitTime);
 }
 
-float GetMonthlyTidalInfluence(fish_t * fish) // 0.25 to 1.25
+float GetMonthlyTidalInfluence(fish_t* fish) // 0.25 to 1.25
 {
     float modifier = 0.5f;
     uint8 month = (uint8)CVanaTime::getInstance()->getMonth();
@@ -257,7 +248,7 @@ float GetMonthlyTidalInfluence(fish_t * fish) // 0.25 to 1.25
     return modifier + 0.25f;
 }
 
-float GetHourlyModifier(fish_t * fish)
+float GetHourlyModifier(fish_t* fish)
 { // 0.25 to 1.25
     float modifier = 0.5f;
     uint8 hour = (uint8)CVanaTime::getInstance()->getHour();
@@ -297,7 +288,7 @@ float GetHourlyModifier(fish_t * fish)
     return modifier + 0.25f;
 }
 
-float GetMoonModifier(fish_t * fish) // 0.25 to 1.25
+float GetMoonModifier(fish_t* fish) // 0.25 to 1.25
 {
     float modifier = 1.0f;
     uint8 moonPhase = GetMoonPhase();
@@ -329,7 +320,7 @@ uint8 GetLuckyMoonModifier()
     return modifier;
 }
 
-float GetWeatherModifier(CCharEntity * PChar)
+float GetWeatherModifier(CCharEntity* PChar)
 {
     WEATHER weather = zoneutils::GetZone(PChar->getZone())->GetWeather();
     float weatherMod = 1.0f;
@@ -351,19 +342,19 @@ uint16 CalculateStamina(int skill, uint8 count)
     return (uint16)std::floor(tpzrand::GetRandomNumber(95, 105) * ((modSkill + 36) / 2));
 }
 
-uint16 CalculateAttack(bool legendary, uint8 difficulty, rod_t * rod)
+uint16 CalculateAttack(bool legendary, uint8 difficulty, rod_t* rod)
 {
     uint8 bonusAdd = (legendary) ? rod->lgdBonusAtk : 0;
     return (uint16)std::floor(difficulty * ((rod->fishAttack + bonusAdd) / 100)) * 20;
 }
 
-uint16 CaculateHeal(bool legendary, uint8 difficulty, rod_t * rod)
+uint16 CaculateHeal(bool legendary, uint8 difficulty, rod_t* rod)
 {
     uint16 attack = CalculateAttack(legendary, difficulty, rod);
     return (uint16)std::floor((attack / 20) * (rod->fishRecovery / 100)) * 10;
 }
 
-uint8 CalculateRegen(uint8 fishingSkill, rod_t * rod, FISHINGCATCHTYPE catchType, uint8 sizeType, uint8 catchSkill, bool legendaryCatch, bool NM)
+uint8 CalculateRegen(uint8 fishingSkill, rod_t* rod, FISHINGCATCHTYPE catchType, uint8 sizeType, uint8 catchSkill, bool legendaryCatch, bool NM)
 {
     uint8 regen = 128;
     uint8 drainDiff = 12;
@@ -373,8 +364,10 @@ uint8 CalculateRegen(uint8 fishingSkill, rod_t * rod, FISHINGCATCHTYPE catchType
     {
         regenMod = 11;
     }
+
     // +1 for large fish/items/mobs if not using Ebisu
     regen += (sizeType > FISHINGSIZETYPE_SMALL && rod->rodID != EBISU) ? 1 : 0;
+
     // legendary rod bonuses
     if (rod->rodID == LU_SHANG || rod->rodID == EBISU || rod->rodID == LU_SHANG_1 || rod->rodID == EBISU_1)
     {
@@ -384,6 +377,7 @@ uint8 CalculateRegen(uint8 fishingSkill, rod_t * rod, FISHINGCATCHTYPE catchType
         }
         regen -= (catchType == FISHINGCATCHTYPE_MOB) ? 3 : 0;
     }
+
     // skill bonus/penalty
     if (catchType <= FISHINGCATCHTYPE_MOB && !NM)
     {
@@ -394,6 +388,7 @@ uint8 CalculateRegen(uint8 fishingSkill, rod_t * rod, FISHINGCATCHTYPE catchType
             {
                 divMod = 1.4f;
             }
+
             if (rod->rodID == EBISU || rod->rodID == EBISU_1)
             {
                 divMod = 1.3f;
@@ -401,6 +396,7 @@ uint8 CalculateRegen(uint8 fishingSkill, rod_t * rod, FISHINGCATCHTYPE catchType
             regen -= std::min<uint8>(
                 (1 + (uint8)std::floor(((fishingSkill + regenMod) - drainDiff - catchSkill) / divMod)), regen);
         }
+
         if (catchType < FISHINGCATCHTYPE_ITEM && catchSkill - regenMod >= (fishingSkill + regenDiff))
         {
             float multMod = 0.5f;
@@ -408,6 +404,7 @@ uint8 CalculateRegen(uint8 fishingSkill, rod_t * rod, FISHINGCATCHTYPE catchType
             {
                 multMod = 0.45f;
             }
+
             if (rod->rodID == EBISU || rod->rodID == EBISU_1)
             {
                 multMod = 0.4f;
@@ -425,7 +422,7 @@ uint8 CalculateRegen(uint8 fishingSkill, rod_t * rod, FISHINGCATCHTYPE catchType
     return std::clamp<uint8>(regen, 0, 182);
 }
 
-uint8 CalculateHookTime(CCharEntity * PChar, bool legendary, uint32 legendary_flags, uint8 sizeType, rod_t * rod, bait_t * bait)
+uint8 CalculateHookTime(CCharEntity* PChar, bool legendary, uint32 legendary_flags, uint8 sizeType, rod_t* rod, bait_t* bait)
 {
     uint8 hookTime = rod->fishTime;
     if ((sizeType == FISHINGSIZETYPE_LARGE && rod->rodFlags & RODFLAG_LARGEPENALTY) ||
@@ -433,18 +430,22 @@ uint8 CalculateHookTime(CCharEntity * PChar, bool legendary, uint32 legendary_fl
     {
         hookTime -= 10;
     }
+
     if (legendary && rod->rodFlags & RODFLAG_LEGENDARYBONUS)
     {
         hookTime += 10;
     }
+
     if (charutils::hasKeyItem(PChar, FISHINGKI_MOOCHING) && (bait->baitID == DRILL_CALAMARY || bait->baitID == DWARF_PUGIL))
     {
         hookTime += 30;
     }
+
     if (PChar->getMod(Mod::ALBATROSS_RING_EFFECT) > 0)
     {
         hookTime += 30;
     }
+
     if (legendary)
     {
         if ((legendary_flags & FISHINGLEGENDARY_NORODTIMEBONUS) ||
@@ -452,10 +453,12 @@ uint8 CalculateHookTime(CCharEntity * PChar, bool legendary, uint32 legendary_fl
         {
             hookTime += rod->lgdBonusTime;
         }
+
         if (legendary_flags & FISHINGLEGENDARY_HALFTIME)
         {
             hookTime -= (uint8)std::floor(rod->fishTime / 2);
         }
+
         if (legendary_flags & FISHINGLEGENDARY_ADDTIMEBONUS)
         {
             hookTime += (rod->multiplier & 10);
@@ -464,13 +467,14 @@ uint8 CalculateHookTime(CCharEntity * PChar, bool legendary, uint32 legendary_fl
     return hookTime;
 }
 
-uint8 CalculateLuckyTiming(CCharEntity * PChar, uint8 fishingSkill, uint8 catchSkill, uint8 sizeType, rod_t * rod, bait_t * bait, bool legendary)
+uint8 CalculateLuckyTiming(CCharEntity* PChar, uint8 fishingSkill, uint8 catchSkill, uint8 sizeType, rod_t* rod, bait_t* bait, bool legendary)
 {
     uint8 luckyTiming = 10;
     float penalty = 0;
     float bonus = 0;
     fishing_gear_t gear = GetFishingGear(PChar);
     uint8 moonModifier = GetLuckyMoonModifier();
+
     // Skill modifier
     if (catchSkill > fishingSkill + 7)
     {
@@ -480,8 +484,10 @@ uint8 CalculateLuckyTiming(CCharEntity * PChar, uint8 fishingSkill, uint8 catchS
     {
         bonus += (uint8)std::floor(((fishingSkill + 10) - catchSkill) / 20);
     }
+
     // Moon modifier
     bonus += (moonModifier * 5) + (moonModifier * tpzrand::GetRandomNumber(1, 5));
+
     // Time of Day modifier
     uint32 gameHour = CVanaTime::getInstance()->getHour();
     if ((gameHour == 6 || gameHour == 7) || (gameHour >= 16 && gameHour <= 18))
@@ -496,6 +502,7 @@ uint8 CalculateLuckyTiming(CCharEntity * PChar, uint8 fishingSkill, uint8 catchS
     {
         bonus += 6;
     }
+
     // Rod modifier
     if (legendary && rod->legendary)
     {
@@ -516,6 +523,7 @@ uint8 CalculateLuckyTiming(CCharEntity * PChar, uint8 fishingSkill, uint8 catchS
             bonus += 2;
         }
     }
+
     // Gear modifier
     switch (gear.body)
     {
@@ -529,6 +537,7 @@ uint8 CalculateLuckyTiming(CCharEntity * PChar, uint8 fishingSkill, uint8 catchS
             bonus += 3;
             break;
     }
+
     switch (gear.hands)
     {
         case FISHERMANS_GLOVES:
@@ -538,6 +547,7 @@ uint8 CalculateLuckyTiming(CCharEntity * PChar, uint8 fishingSkill, uint8 catchS
             bonus += 1;
             break;
     }
+
     switch (gear.legs)
     {
         case FISHERMANS_HOSE:
@@ -547,6 +557,7 @@ uint8 CalculateLuckyTiming(CCharEntity * PChar, uint8 fishingSkill, uint8 catchS
             bonus += 1;
             break;
     }
+
     switch (gear.feet)
     {
         case FISHERMANS_BOOTS:
@@ -559,6 +570,7 @@ uint8 CalculateLuckyTiming(CCharEntity * PChar, uint8 fishingSkill, uint8 catchS
             bonus += 2;
             break;
     }
+
     // Bait modifier
     if (bait->baitFlags & BAITFLAG_GOLD_ARROW_BONUS)
     {
@@ -566,10 +578,11 @@ uint8 CalculateLuckyTiming(CCharEntity * PChar, uint8 fishingSkill, uint8 catchS
     }
     luckyTiming += (uint8)std::floor(bonus);
     luckyTiming -= (uint8)std::floor((penalty > luckyTiming) ? luckyTiming : penalty);
+
     return std::max<uint8>(5, luckyTiming);
 }
 
-uint16 CalculateHookChance(uint8 fishingSkill, fish_t * fish, bait_t * bait, rod_t * rod)
+uint16 CalculateHookChance(uint8 fishingSkill, fish_t* fish, bait_t* bait, rod_t* rod)
 {
     uint16 hookChance = 0;
     float monthModifier = GetMonthlyTidalInfluence(fish);
@@ -577,6 +590,7 @@ uint16 CalculateHookChance(uint8 fishingSkill, fish_t * fish, bait_t * bait, rod
     float moonModifier = GetMoonModifier(fish) * 3;
     float modifier = std::max<float>(0, (moonModifier + hourModifier + monthModifier) / 3);
     hookChance = (uint16)std::floor(25 * modifier);
+
     // Bait power
     uint8 baitPower = GetBaitPower(bait, fish);
     switch (baitPower)
@@ -591,16 +605,19 @@ uint16 CalculateHookChance(uint8 fishingSkill, fish_t * fish, bait_t * bait, rod
             hookChance += (bait->baitType == FISHINGBAITTYPE_LURE) ? 75 : 80;
             break;
     }
+
     // Level penalty
     if (fish->maxSkill > fishingSkill)
     {
         hookChance -= std::clamp<uint16>((uint16)std::floor((fish->maxSkill - fishingSkill) * 0.25), 0, hookChance);
     }
+
     // Reverse level penalty
     if (fishingSkill - 10 > fish->maxSkill)
     {
         hookChance -= std::clamp<uint16>((uint16)std::floor((fishingSkill - 10 - fish->maxSkill) * 0.15), 0, hookChance);
     }
+
     // Rod penalty
     if (!rod->legendary)
     {
@@ -613,27 +630,31 @@ uint16 CalculateHookChance(uint8 fishingSkill, fish_t * fish, bait_t * bait, rod
             hookChance -= std::clamp<uint16>(5, 0, hookChance);
         }
     }
+
     // Bait bonus
     if (bait->baitFlags & BAITFLAG_SHELLFISH_AFFINITY && fish->fishFlags & FISHFLAG_SHELLFISH)
     {
         hookChance += 50;
     }
+
     // Fish rarity
     if (fish->rarity < 1000)
     {
         float multiplier = fish->rarity / 1000.0f;
         hookChance = (uint16)std::floor(hookChance * multiplier);
     }
+
     return std::clamp<uint16>(hookChance, 20, 120);
 }
 
-uint8 CalculateDelay(CCharEntity * PChar, uint8 baseDelay, uint8 sizeType, rod_t * rod, uint8 count)
+uint8 CalculateDelay(CCharEntity* PChar, uint8 baseDelay, uint8 sizeType, rod_t* rod, uint8 count)
 {
     uint8 botcheckMod = 0;
     if (PChar->GetLocalVar("FishBotCheck") > 0)
     {
         botcheckMod = 2;
     }
+
     float multiplier = 1.0f + (0.1f * (count - 1.0f));
     uint8 delay = (uint8)std::floor(baseDelay * multiplier);
     if (sizeType == FISHINGSIZETYPE_SMALL)
@@ -644,6 +665,7 @@ uint8 CalculateDelay(CCharEntity * PChar, uint8 baseDelay, uint8 sizeType, rod_t
     {
         delay += rod->lgDelayBonus;
     }
+
     if (PChar->getMod(Mod::PENGUIN_RING_EFFECT) > 0)
     {
         delay += 2;
@@ -652,7 +674,7 @@ uint8 CalculateDelay(CCharEntity * PChar, uint8 baseDelay, uint8 sizeType, rod_t
     return std::min<uint8>(15, delay);
 }
 
-uint8 CalculateMovement(CCharEntity * PChar, uint8 baseMove, uint8 sizeType, rod_t * rod, uint8 count)
+uint8 CalculateMovement(CCharEntity* PChar, uint8 baseMove, uint8 sizeType, rod_t* rod, uint8 count)
 {
     uint8 botcheckMod = 0;
     if (PChar->GetLocalVar("FishBotCheck") > 0)
@@ -661,6 +683,7 @@ uint8 CalculateMovement(CCharEntity * PChar, uint8 baseMove, uint8 sizeType, rod
     }
     float multiplier = 1.0f + (0.1f * (count - 1.0f));
     uint8 movement = (uint8)std::floor(baseMove * multiplier);
+
     if (sizeType == FISHINGSIZETYPE_SMALL)
     {
         movement += rod->smMoveBonus;
@@ -669,6 +692,7 @@ uint8 CalculateMovement(CCharEntity * PChar, uint8 baseMove, uint8 sizeType, rod
     {
         movement += rod->lgMoveBonus;
     }
+
     if (PChar->getMod(Mod::PENGUIN_RING_EFFECT) > 0)
     {
         movement += 2;
@@ -677,7 +701,7 @@ uint8 CalculateMovement(CCharEntity * PChar, uint8 baseMove, uint8 sizeType, rod
     return std::min<uint8>(15, movement);
 }
 
-lsbret_t CalculateLoseChance(uint8 catchType, uint8 fishingSkill, uint8 maxSkill, uint8 sizeType, bool legendary, uint8 ranking, rod_t * rod)
+lsbret_t CalculateLoseChance(uint8 catchType, uint8 fishingSkill, uint8 maxSkill, uint8 sizeType, bool legendary, uint8 ranking, rod_t* rod)
 {
     lsbret_t lsb;
     uint8 tooBigChance = 0;
@@ -685,6 +709,7 @@ lsbret_t CalculateLoseChance(uint8 catchType, uint8 fishingSkill, uint8 maxSkill
     uint8 lowSkillChance = 0;
     lsb.failReason = FISHINGFAILTYPE_NONE;
     lsb.chance = 0;
+
     if (!rod->legendary)
     {
         if (sizeType > rod->sizeType && ranking > rod->maxRank)
@@ -694,6 +719,7 @@ lsbret_t CalculateLoseChance(uint8 catchType, uint8 fishingSkill, uint8 maxSkill
             {
                 tooBigChance += maxSkill - fishingSkill;
             }
+
             if (fishingSkill > maxSkill)
             {
                 tooBigChance -= fishingSkill - maxSkill;
@@ -706,6 +732,7 @@ lsbret_t CalculateLoseChance(uint8 catchType, uint8 fishingSkill, uint8 maxSkill
             {
                 tooSmallChance += maxSkill - fishingSkill;
             }
+
             if (fishingSkill > maxSkill)
             {
                 tooSmallChance -= std::min<uint8>(fishingSkill - maxSkill, tooSmallChance);
@@ -718,6 +745,7 @@ lsbret_t CalculateLoseChance(uint8 catchType, uint8 fishingSkill, uint8 maxSkill
         float diffAdd = diff * 0.8f;
         lowSkillChance = (uint8)std::floor(diffAdd); // min 5, max 85
     }
+
     if (tooBigChance > 0 && tooBigChance > lowSkillChance)
     {
         lsb.failReason = FISHINGFAILTYPE_LOST_TOOBIG;
@@ -736,7 +764,7 @@ lsbret_t CalculateLoseChance(uint8 catchType, uint8 fishingSkill, uint8 maxSkill
     return lsb;
 }
 
-lsbret_t CalculateSnapChance(uint8 catchType, uint8 fishingSkill, uint8 maxSkill, uint8 sizeType, bool legendary, uint8 ranking, rod_t * rod)
+lsbret_t CalculateSnapChance(uint8 catchType, uint8 fishingSkill, uint8 maxSkill, uint8 sizeType, bool legendary, uint8 ranking, rod_t* rod)
 {
     lsbret_t lsb;
     uint8 levelDiffBonus = 0;
@@ -745,14 +773,17 @@ lsbret_t CalculateSnapChance(uint8 catchType, uint8 fishingSkill, uint8 maxSkill
     uint8 totalDurability = 0;
     lsb.failReason = FISHINGFAILTYPE_NONE;
     lsb.chance = 0;
+
     if (fishingSkill + 10 > maxSkill)
     {
         levelDiffBonus = 2;
     }
+
     if (!rod->legendary && sizeType > rod->sizeType)
     {
         sizePenalty = 2;
     }
+
     if (legendary)
     {
         if (!rod->legendary)
@@ -764,6 +795,7 @@ lsbret_t CalculateSnapChance(uint8 catchType, uint8 fishingSkill, uint8 maxSkill
             legendaryBonus = 1;
         }
     }
+
     totalDurability = rod->maxRank + levelDiffBonus + legendaryBonus - sizePenalty;
     if (ranking > totalDurability)
     {
@@ -774,7 +806,7 @@ lsbret_t CalculateSnapChance(uint8 catchType, uint8 fishingSkill, uint8 maxSkill
     return lsb;
 }
 
-lsbret_t CalculateBreakChance(uint8 catchType, uint8 fishingSkill, uint8 maxSkill, uint8 sizeType, bool legendary, uint8 ranking, rod_t * rod)
+lsbret_t CalculateBreakChance(uint8 catchType, uint8 fishingSkill, uint8 maxSkill, uint8 sizeType, bool legendary, uint8 ranking, rod_t* rod)
 {
     lsbret_t lsb;
     uint8 levelDiffBonus = 0;
@@ -784,14 +816,17 @@ lsbret_t CalculateBreakChance(uint8 catchType, uint8 fishingSkill, uint8 maxSkil
     uint8 sizePenalty = 0;
     lsb.failReason = FISHINGFAILTYPE_NONE;
     lsb.chance = 0;
+
     if (!rod->breakable)
     {
         return lsb;
     }
+
     if (fishingSkill + 10 > maxSkill)
     {
         levelDiffBonus = 2;
     }
+
     if (!rod->legendary && sizeType > rod->sizeType)
     {
         sizePenalty = 2;
@@ -800,23 +835,26 @@ lsbret_t CalculateBreakChance(uint8 catchType, uint8 fishingSkill, uint8 maxSkil
     {
         legendaryBonus = 1;
     }
+
     if (!rod->legendary && legendary)
     {
         sizePenalty = 5;
     }
+
     if (ranking > rod->maxRank + levelDiffBonus + legendaryBonus)
     {
         uint8 strDuraDiff = ranking - (rod->maxRank + levelDiffBonus + legendaryBonus);
         lsb.failReason = FISHINGFAILTYPE_RODBREAK;
         lsb.chance = std::clamp<uint8>((uint8)std::floor((strDuraDiff + sizePenalty) * 1.3f), 0, 55);
     }
+
     return lsb;
 }
 
 // @TODO: figure out how to pass mobs and items and chests here...
 
-uint8 CalculateFishSense(CCharEntity * PChar, fishresponse_t * response, uint8 fishingSkill, uint8 catchType, uint8 sizeType,
-    uint8 maxSkill, bool legendary, uint16 minLength, uint16 maxLength, uint8 ranking, rod_t * rod)
+uint8 CalculateFishSense(CCharEntity* PChar, fishresponse_t* response, uint8 fishingSkill, uint8 catchType, uint8 sizeType,
+    uint8 maxSkill, bool legendary, uint16 minLength, uint16 maxLength, uint8 ranking, rod_t* rod)
 {
     uint8 sense = FISHINGSENSETYPE_GOOD;
     if (catchType == FISHINGCATCHTYPE_BIGFISH)
@@ -826,6 +864,7 @@ uint8 CalculateFishSense(CCharEntity * PChar, fishresponse_t * response, uint8 f
         response->weight = bigfishStats.weight;
         response->epic = bigfishStats.epic;
     }
+
     lsbret_t lose = CalculateLoseChance(catchType, fishingSkill, maxSkill, sizeType, legendary, ranking, rod);
     lsbret_t lsnap = CalculateSnapChance(catchType, fishingSkill, maxSkill, sizeType, legendary, ranking, rod);
     lsbret_t rbreak = CalculateBreakChance(catchType, fishingSkill, maxSkill, sizeType, legendary, ranking, rod);
@@ -872,7 +911,7 @@ uint8 CalculateFishSense(CCharEntity * PChar, fishresponse_t * response, uint8 f
     return sense;
 }
 
-uint16 CalculateCriticalBite(uint8 fishingSkill, uint8 fishSkill, rod_t * rod)
+uint16 CalculateCriticalBite(uint8 fishingSkill, uint8 fishSkill, rod_t* rod)
 {
     uint16 chance = 0;
     uint8 ebisuBonus = 0;
@@ -880,6 +919,7 @@ uint16 CalculateCriticalBite(uint8 fishingSkill, uint8 fishSkill, rod_t * rod)
     {
         ebisuBonus = 40;
     }
+
     if (fishSkill - 4 > fishingSkill + ebisuBonus)
     {
         return 0;
@@ -889,7 +929,7 @@ uint16 CalculateCriticalBite(uint8 fishingSkill, uint8 fishSkill, rod_t * rod)
     chance = 5 + (uint16)std::max((fishingSkill + ebisuBonus) - fishSkillCheck, 0) * 2;
     // Moon mod (max + 20)
     float moonModifier = 2 * MOONPATTERN_3(GetMoonPhase());
-    chance += (uint16)(10 * (2 - (moonModifier)));
+    chance += (uint16)(10* (2 - (moonModifier)));
     return std::clamp<uint16>(chance, 0, 70);
 }
 
@@ -912,39 +952,46 @@ big_fish_stats_t CalculateBigFishStats(uint16 minLength, uint16 maxLength)
     return stats;
 }
 
-fishmob_modifiers_t CalculateMobModifiers(fishmob_t * mob)
+fishmob_modifiers_t CalculateMobModifiers(fishmob_t* mob)
 {
     fishmob_modifiers_t modifiers;
     modifiers.attackPenalty = 0;
     modifiers.healBonus = 0;
     modifiers.regenBonus = 0;
+
     // regen bonus
     if (mob->nmFlags & FISHINGNM_RANDOM_REGEN_EASY)
     {
         modifiers.regenBonus += tpzrand::GetRandomNumber<uint16>(0, 1);
     }
+
     if (mob->nmFlags & FISHINGNM_RANDOM_REGEN_DIFFICULT)
     {
         modifiers.regenBonus += tpzrand::GetRandomNumber<uint16>(1, 2);
     }
+
     // heal bonus
     if (mob->nmFlags & FISHINGNM_RANDOM_HEAL_EASY)
     {
         modifiers.healBonus += tpzrand::GetRandomNumber<uint16>(0, 10);
     }
+
     if (mob->nmFlags & FISHINGNM_RANDOM_HEAL_DIFFICULT)
     {
         modifiers.healBonus += tpzrand::GetRandomNumber<uint16>(15, 30);
     }
+
     // attack penalty
     if (mob->nmFlags & FISHINGNM_RANDOM_ATTACK_EASY)
     {
         modifiers.attackPenalty += tpzrand::GetRandomNumber<uint16>(0, 10);
     }
+
     if (mob->nmFlags & FISHINGNM_RANDOM_ATTACK_DIFFICULT)
     {
         modifiers.attackPenalty += tpzrand::GetRandomNumber<uint16>(15, 30);
     }
+
     return modifiers;
 }
 
@@ -953,7 +1000,7 @@ fishmob_modifiers_t CalculateMobModifiers(fishmob_t * mob)
 *                              DATA ACCESS                              *
 *																		*
 ************************************************************************/
-fishing_gear_t GetFishingGear(CCharEntity * PChar)
+fishing_gear_t GetFishingGear(CCharEntity* PChar)
 {
     fishing_gear_t gear;
     uint32 head = (PChar->getEquip(SLOT_HEAD) != nullptr) ? PChar->getEquip(SLOT_HEAD)->getID() : 0;
@@ -973,18 +1020,18 @@ fishing_gear_t GetFishingGear(CCharEntity * PChar)
     return gear;
 }
 
-bool IsLiveBait(bait_t * bait)
+bool IsLiveBait(bait_t* bait)
 {
     return (bait->baitID == DRILL_CALAMARY || bait->baitID == DWARF_PUGIL);
 }
 
-uint8 GetFishingSkill(CCharEntity * PChar)
+uint8 GetFishingSkill(CCharEntity* PChar)
 {
     uint8 rawSkill = (uint8)std::min(100, (int)std::floor(PChar->RealSkills.skill[SKILL_FISHING] / 10));
     return (uint8)rawSkill + PChar->getMod(Mod::FISH);
 }
 
-uint8 GetBaitPower(bait_t * bait, fish_t * fish)
+uint8 GetBaitPower(bait_t* bait, fish_t* fish)
 {
     if (FishingBaitAffinities[bait->baitID][fish->fishID])
     {
@@ -1024,7 +1071,7 @@ std::vector<fish_t*> GetItemPool(uint16 zoneID, uint8 areaID)
 std::vector<fishmob_t*> GetMobPool(uint16 zoneId)
 {
     std::vector<fishmob_t*> pool;
-    if (FishZoneMobList[zoneId].size() > 0)
+    if (!FishZoneMobList[zoneId].empty())
     {
         for (auto mob : FishZoneMobList[zoneId])
         {
@@ -1042,9 +1089,9 @@ uint16 GetMessageOffset(uint16 ZoneID)
     return MessageOffset[ZoneID];
 }
 
-bool IsFish(CItem * fish)
+bool IsFish(CItem* fish)
 {
-    if (fish != nullptr && FishList.size() > 0)
+    if (fish != nullptr && !FishList.empty())
     {
         auto f = FishList.find(fish->getID());
         if (f != FishList.end())
@@ -1055,9 +1102,9 @@ bool IsFish(CItem * fish)
     return false;
 }
 
-fish_t * GetFish(uint32 fishId)
+fish_t* GetFish(uint32 fishId)
 {
-    if (FishList.size() > 0)
+    if (!FishList.empty())
     {
         auto f = FishList.find(fishId);
         if (f != FishList.end())
@@ -1078,11 +1125,7 @@ fish_t * GetFish(uint32 fishId)
 // areavector_t q lies on line segment 'pr'
 bool onSegment(areavector_t p, areavector_t q, areavector_t r)
 {
-    if (q.x <= std::max(p.x, r.x) && q.x >= std::min(p.x, r.x) && q.z <= std::max(p.z, r.z) && q.z >= std::min(p.z, r.z))
-    {
-        return true;
-    }
-    return false;
+    return q.x <= std::max(p.x, r.x) && q.x >= std::min(p.x, r.x) && q.z <= std::max(p.z, r.z) && q.z >= std::min(p.z, r.z);
 }
 
 // To find orientation of ordered triplet (p, q, r).
@@ -1119,7 +1162,7 @@ bool doIntersect(areavector_t p1, areavector_t q1, areavector_t p2, areavector_t
 // Returns true if the areavector_t p lies inside the polygon[] with n vertices
 bool isInsidePoly(areavector_t polygon[], int n, areavector_t p, float posy, uint8 height)
 {
-    if (p.y < (posy - (height / 2)) || p.y >(posy + (height / 2)))
+    if (p.y < (posy - (height / 2)) || p.y > (posy + (height / 2)))
         return false;
     if (n < 3)
         return false;
@@ -1140,7 +1183,7 @@ bool isInsidePoly(areavector_t polygon[], int n, areavector_t p, float posy, uin
 }
 bool isInsideCylinder(areavector_t center, areavector_t p, uint16 radius, uint8 height)
 {
-    if (p.y < (center.y - (height / 2)) || p.y >(center.y + (height / 2)))
+    if (p.y < (center.y - (height / 2)) || p.y > (center.y + (height / 2)))
         return false;
     float dx = std::abs(p.x - center.x);
     if (dx > radius)
@@ -1154,14 +1197,14 @@ bool isInsideCylinder(areavector_t center, areavector_t p, uint16 radius, uint8 
     return true;
 }
 
-fishingarea_t * GetFishingArea(CCharEntity * PChar)
+fishingarea_t* GetFishingArea(CCharEntity* PChar)
 {
     int16 zoneId = PChar->getZone();
     position_t p = PChar->loc.p;
     areavector_t loc = { p.x, p.y, p.z };
     for (auto area : FishingAreaList[zoneId])
     {
-        fishingarea_t * fishingArea = FishingAreaList[zoneId][area.first];
+        fishingarea_t* fishingArea = FishingAreaList[zoneId][area.first];
         switch (fishingArea->areatype)
         {
             case 0: // Whole Zone
@@ -1181,12 +1224,12 @@ fishingarea_t * GetFishingArea(CCharEntity * PChar)
                 break;
         }
     }
-    return NULL;
+    return nullptr;
 }
 
-bool BaitLoss(CCharEntity * PChar, bool RemoveFly, bool SendUpdate)
+bool BaitLoss(CCharEntity* PChar, bool RemoveFly, bool SendUpdate)
 {
-    CItemWeapon * PBait = (CItemWeapon*)PChar->getEquip(SLOT_AMMO);
+    CItemWeapon* PBait = dynamic_cast<CItemWeapon*>(PChar->getEquip(SLOT_AMMO));
     TPZ_DEBUG_BREAK_IF(PBait == nullptr);
     TPZ_DEBUG_BREAK_IF(PBait->isType(ITEM_WEAPON) == false);
     TPZ_DEBUG_BREAK_IF(PBait->getSkillType() != SKILL_FISHING);
@@ -1212,10 +1255,10 @@ bool BaitLoss(CCharEntity * PChar, bool RemoveFly, bool SendUpdate)
     return true;
 }
 
-void RodBreak(CCharEntity * PChar)
+void RodBreak(CCharEntity* PChar)
 {
-    CItemWeapon * PRanged = (CItemWeapon*)PChar->getEquip(SLOT_RANGED);
-    rod_t * PRod = FishingRods[PRanged->getID()];
+    CItemWeapon* PRanged = dynamic_cast<CItemWeapon*>(PChar->getEquip(SLOT_RANGED));
+    rod_t* PRod = FishingRods[PRanged->getID()];
     TPZ_DEBUG_BREAK_IF(PRanged == nullptr);
     TPZ_DEBUG_BREAK_IF(PRod == nullptr);
     if (PRanged != nullptr && PRod != nullptr)
@@ -1232,7 +1275,7 @@ void RodBreak(CCharEntity * PChar)
     }
 }
 
-bool CanFishMob(CMobEntity * PMob)
+bool CanFishMob(CMobEntity* PMob)
 {
     if (PMob == nullptr)
         return false;
@@ -1245,7 +1288,7 @@ bool CanFishMob(CMobEntity * PMob)
     return true;
 }
 
-int32 LoseCatch(CCharEntity * PChar, uint8 FailType)
+int32 LoseCatch(CCharEntity* PChar, uint8 FailType)
 {
     uint16 MessageOffset = GetMessageOffset(PChar->getZone());
     PChar->updatemask |= UPDATE_HP;
@@ -1289,7 +1332,7 @@ int32 LoseCatch(CCharEntity * PChar, uint8 FailType)
     return 1;
 }
 
-int32 CatchNothing(CCharEntity * PChar, uint8 FailType)
+int32 CatchNothing(CCharEntity* PChar, uint8 FailType)
 {
     uint16 MessageOffset = GetMessageOffset(PChar->getZone());
     PChar->animation = ANIMATION_FISHING_STOP;
@@ -1304,14 +1347,14 @@ int32 CatchNothing(CCharEntity * PChar, uint8 FailType)
     return 1;
 }
 
-int32 CatchFish(CCharEntity * PChar, uint16 FishID, bool BigFish, uint16 length, uint16 weight, uint8 Count = 1)
+int32 CatchFish(CCharEntity* PChar, uint16 FishID, bool BigFish, uint16 length, uint16 weight, uint8 Count = 1)
 {
     uint16 MessageOffset = GetMessageOffset(PChar->getZone());
     PChar->animation = ANIMATION_FISHING_CAUGHT;
     PChar->updatemask |= UPDATE_HP;
     if (PChar->getStorage(LOC_INVENTORY)->GetFreeSlotsCount() != 0)
     {
-        CItemFish * Fish = (CItemFish*)itemutils::GetItem(FishID);
+        CItemFish* Fish = dynamic_cast<CItemFish*>(itemutils::GetItem(FishID));
         if (Fish == nullptr)
         {
             ShowError("Invalid ItemID %i for fished item\n", FishID);
@@ -1326,10 +1369,16 @@ int32 CatchFish(CCharEntity * PChar, uint16 FishID, bool BigFish, uint16 length,
             Fish->SetWeight(weight);
             uint16 recordLength = charutils::GetCharVar(PChar, "FishingRecordLength");
             uint16 recordWeight = charutils::GetCharVar(PChar, "FishingRecordWeight");
+
             if (length > recordLength)
+            {
                 charutils::SetCharVar(PChar, "FishingRecordLength", length);
+            }
+
             if (weight > recordWeight)
+            {
                 charutils::SetCharVar(PChar, "FishingRecordWeight", weight);
+            }
         }
         Fish->setQuantity(Count);
         charutils::AddItem(PChar, LOC_INVENTORY, Fish);
@@ -1350,14 +1399,14 @@ int32 CatchFish(CCharEntity * PChar, uint16 FishID, bool BigFish, uint16 length,
     return 0;
 }
 
-int32 CatchItem(CCharEntity * PChar, uint16 ItemID, uint8 Count = 1)
+int32 CatchItem(CCharEntity* PChar, uint16 ItemID, uint8 Count = 1)
 {
     uint16 MessageOffset = GetMessageOffset(PChar->getZone());
     PChar->animation = ANIMATION_FISHING_CAUGHT;
     PChar->updatemask |= UPDATE_HP;
     if (PChar->getStorage(LOC_INVENTORY)->GetFreeSlotsCount() != 0)
     {
-        CItem * Item = (CItem*)itemutils::GetItem(ItemID);
+        CItem* Item = itemutils::GetItem(ItemID);
         if (Item == nullptr)
         {
             ShowError("Invalid ItemID %i for fished item\n", ItemID);
@@ -1384,15 +1433,18 @@ int32 CatchItem(CCharEntity * PChar, uint16 ItemID, uint8 Count = 1)
     return 0;
 }
 
-int32 CatchMonster(CCharEntity * PChar, uint32 MobID)
+int32 CatchMonster(CCharEntity* PChar, uint32 MobID)
 {
     uint16 MessageOffset = GetMessageOffset(PChar->getZone());
-    CMobEntity * PMob = (CMobEntity*)zoneutils::GetEntity(MobID, TYPE_MOB);
-    fishmob_t * mob = FishZoneMobList[PChar->getZone()][MobID];
+    CMobEntity* PMob = dynamic_cast<CMobEntity*>(zoneutils::GetEntity(MobID, TYPE_MOB));
+    fishmob_t* mob = FishZoneMobList[PChar->getZone()][MobID];
     if ((PMob == nullptr) || (mob == nullptr) || PMob->isAlive() || (PMob != nullptr && mob->questOnly && PMob->GetLocalVar("catchable") == 0))
     {
         if (!PMob->isAlive())
+        {
             ShowError("Invalid MobID %i for fished monster\n", MobID);
+        }
+
         PChar->animation = ANIMATION_FISHING_STOP;
         PChar->updatemask |= UPDATE_HP;
         PChar->pushPacket(new CMessageTextPacket(PChar, MessageOffset + FISHMESSAGEOFFSET_LOST));
@@ -1415,9 +1467,13 @@ int32 CatchMonster(CCharEntity * PChar, uint32 MobID)
     PMob->SetDespawnTime(std::chrono::seconds(180));
     PMob->SetLocalVar("hooked", 0);
     if (mob->maxRespawn > mob->minRespawn)
+    {
         PMob->SetLocalVar("respawnTime", tpzrand::GetRandomNumber<uint32>(mob->minRespawn, mob->maxRespawn));
+    }
     else
+    {
         PMob->SetLocalVar("respawnTime", mob->maxRespawn);
+    }
     // PMob->SetLocalVar("QuestBattleID", PChar->GetLocalVar("QuestBattleID"));
     // PChar->StatusEffectContainer->CopyConfrontationEffect(PMob);
     if ((mob->log < 255 && mob->quest < 255) || mob->questOnly || (PMob->m_TrueDetection && PMob->m_Detects & DETECT_SCENT) || !PChar->StatusEffectContainer->HasStatusEffect(EFFECT_SNEAK))
@@ -1428,11 +1484,11 @@ int32 CatchMonster(CCharEntity * PChar, uint32 MobID)
     return 1;
 }
 
-int32 CatchChest(CCharEntity * PChar, uint32 NpcID, uint8 distance, int8 angle)
+int32 CatchChest(CCharEntity* PChar, uint32 NpcID, uint8 distance, int8 angle)
 {
     uint16 MessageOffset = GetMessageOffset(PChar->getZone());
     // @todo: get chest npc (i.e. jade etui)
-    CNpcEntity * Chest = (CNpcEntity*)zoneutils::GetEntity(NpcID, TYPE_NPC);
+    CNpcEntity* Chest = dynamic_cast<CNpcEntity*>(zoneutils::GetEntity(NpcID, TYPE_NPC));
     if (Chest == nullptr || (Chest != nullptr && Chest->GetLocalVar("catchable") == 0))
     {
         ShowError("Invalid NpcID %i for fished chest\n", NpcID);
@@ -1463,7 +1519,7 @@ int32 CatchChest(CCharEntity * PChar, uint32 NpcID, uint8 distance, int8 angle)
 *                             MESSAGING                                 *
 *                                                                       *
 ************************************************************************/
-void SendSenseMessage(CCharEntity * PChar, fishresponse_t * response)
+void SendSenseMessage(CCharEntity* PChar, fishresponse_t* response)
 {
     uint16 MessageOffset = GetMessageOffset(PChar->getZone());
     switch (response->sense)
@@ -1495,7 +1551,7 @@ void SendSenseMessage(CCharEntity * PChar, fishresponse_t * response)
     }
 }
 
-bool SendHookResponse(CCharEntity * PChar, fishresponse_t * response, bool cancelOnMobLoadFail)
+bool SendHookResponse(CCharEntity* PChar, fishresponse_t* response, bool cancelOnMobLoadFail)
 {
     uint16 MessageOffset = GetMessageOffset(PChar->getZone());
     switch (response->catchtype)
@@ -1511,7 +1567,7 @@ bool SendHookResponse(CCharEntity * PChar, fishresponse_t * response, bool cance
             break;
         case FISHINGCATCHTYPE_MOB:
         {
-            CMobEntity * PMob = (CMobEntity*)zoneutils::GetEntity(PChar->hookedFish->catchid, TYPE_MOB);
+            CMobEntity* PMob = dynamic_cast<CMobEntity*>(zoneutils::GetEntity(PChar->hookedFish->catchid, TYPE_MOB));
             if (CanFishMob(PMob))
             {
                 PChar->pushPacket(new CMessageTextPacket(PChar, MessageOffset + FISHMESSAGEOFFSET_HOOKED_MONSTER));
@@ -1541,10 +1597,10 @@ bool SendHookResponse(CCharEntity * PChar, fishresponse_t * response, bool cance
 // Generate a non-cumulative normal distribution value
 static double NormalDist(double x, double mean, double standard_dev)
 {
-    return exp(-0.5 * log(2 * std::_Pi) - log(standard_dev) - pow(x - mean, 2) / (2 * standard_dev * standard_dev));
+    return exp(-0.5 * log(2 * M_PI) - log(standard_dev) - pow(x - mean, 2) / (2 * standard_dev * standard_dev));
 }
 
-void FishingSkillup(CCharEntity * PChar, uint8 catchLevel, uint8 successType)
+void FishingSkillup(CCharEntity* PChar, uint8 catchLevel, uint8 successType)
 {
     if (successType == FISHINGSUCCESSTYPE_NONE)
     {
@@ -1556,11 +1612,12 @@ void FishingSkillup(CCharEntity * PChar, uint8 catchLevel, uint8 successType)
     int32 charSkillLevel = (uint32)std::floor(PChar->RealSkills.skill[SKILL_FISHING] / 10);
     uint8 levelDifference = 0;
     int maxSkillAmount = 1;
-    CItemWeapon * Rod = (CItemWeapon*)PChar->getEquip(SLOT_RANGED);
+    CItemWeapon* Rod = dynamic_cast<CItemWeapon*>(PChar->getEquip(SLOT_RANGED));
     if (catchLevel > charSkillLevel)
     {
         levelDifference = catchLevel - charSkillLevel;
     }
+
     // No skillup if fish level not between char level and 50 levels higher
     if (catchLevel <= charSkillLevel || (levelDifference > 50))
     {
@@ -1569,19 +1626,23 @@ void FishingSkillup(CCharEntity * PChar, uint8 catchLevel, uint8 successType)
     int skillRoll = 90;
     int maxChance = 0;
     int bonusChanceRoll = 8;
+
     // Lu shang rod under level 50 penalty
     if (Rod != nullptr && charSkillLevel < 50 && Rod->getID() == LU_SHANG)
     {
         skillRoll += 20;
     }
+
     // Generate a normal distribution favoring fish 10 levels higher in skill
     // with 5 levels of deviation on either side
     double normDist = NormalDist(levelDifference, 11, 5);
     int distMod = (int)std::floor(normDist * 200);
     int lowerLevelBonus = (int)std::floor((100 - charSkillLevel) / 10);
     int skillLevelPenalty = (int)std::floor(charSkillLevel / 10);
+
     // Minimum 4% chance
     maxChance = std::max(4, distMod + lowerLevelBonus - skillLevelPenalty);
+
     // Moon phase skillup modifiers
     uint8 phase = CVanaTime::getInstance()->getMoonPhase();
     uint8 moonDirection = CVanaTime::getInstance()->getMoonDirection();
@@ -1623,30 +1684,36 @@ void FishingSkillup(CCharEntity * PChar, uint8 catchLevel, uint8 successType)
             }
             break;
     }
+
     // Not in City bonus
     if (zoneutils::GetZone(PChar->getZone())->GetType() > ZONETYPE_CITY)
     {
         skillRoll -= 10;
     }
+
     if (charSkillLevel < 50)
     {
         skillRoll -= (20 - (uint8)std::floor(charSkillLevel / 3));
     }
+
     // Max skill amount increases as level difference gets higher
     const int skillAmountAdd = 1 + (int)std::floor(levelDifference / 5);
     maxSkillAmount = std::min(skillAmountAdd, 3);
     if (tpzrand::GetRandomNumber(skillRoll) < maxChance)
     {
         int32 skillAmount = 1;
+
         // Bonus points
         if (tpzrand::GetRandomNumber(bonusChanceRoll) == 1)
         {
             skillAmount = tpzrand::GetRandomNumber(1, maxSkillAmount);
         }
+
         if ((skillAmount + charSkill) > maxSkill)
         {
             skillAmount = maxSkill - charSkill;
         }
+
         if (skillAmount > 0)
         {
             PChar->RealSkills.skill[SKILL_FISHING] += skillAmount;
@@ -1667,7 +1734,7 @@ void FishingSkillup(CCharEntity * PChar, uint8 catchLevel, uint8 successType)
 *                              FISHING                                  *
 *																		*
 ************************************************************************/
-void InterruptFishing(CCharEntity * PChar)
+void InterruptFishing(CCharEntity* PChar)
 {
     if (PChar->animation == ANIMATION_FISHING_FISH)
     {
@@ -1684,14 +1751,14 @@ void InterruptFishing(CCharEntity * PChar)
     PChar->pushPacket(new CReleasePacket(PChar, RELEASE_FISHING));
 }
 
-void StartFishing(CCharEntity * PChar)
+void StartFishing(CCharEntity* PChar)
 {
     PChar->StatusEffectContainer->DelStatusEffect(EFFECT_INVISIBLE);
     PChar->StatusEffectContainer->DelStatusEffect(EFFECT_HIDE);
     PChar->StatusEffectContainer->DelStatusEffect(EFFECT_CAMOUFLAGE);
     uint16 MessageOffset = GetMessageOffset(PChar->getZone());
-    CItemWeapon * Rod = nullptr;
-    CItemWeapon * Bait = nullptr;
+    CItemWeapon* Rod = nullptr;
+    CItemWeapon* Bait = nullptr;
     uint8 FishingAreaID = 0;
     if (charutils::GetCharVar(PChar, "FishingDenied") == 1)
     {
@@ -1700,6 +1767,7 @@ void StartFishing(CCharEntity * PChar)
         PChar->pushPacket(new CReleasePacket(PChar, RELEASE_FISHING));
         return;
     }
+    
     uint32 vanaTime = CVanaTime::getInstance()->getVanaTime();
     if (PChar->nextFishTime > vanaTime)
     {
@@ -1714,6 +1782,7 @@ void StartFishing(CCharEntity * PChar)
         charutils::SetCharVar(PChar, "LastFishTime", vanaTime);
         PChar->nextFishTime = PChar->lastCastTime + 5;
     }
+    
     // If not able to pull the fishing message offset for the current zone, can't fish
     if (MessageOffset == 0)
     {
@@ -1721,21 +1790,20 @@ void StartFishing(CCharEntity * PChar)
         PChar->pushPacket(new CReleasePacket(PChar, RELEASE_FISHING));
         return;
     }
-    fishingarea_t * Area = GetFishingArea(PChar);
+    fishingarea_t* Area = GetFishingArea(PChar);
     if (Area != nullptr)
     {
         FishingAreaID = Area->areaId;
     }
+    
     if (FishingAreaID > 0)
     {
         PChar->fishingToken = 1 + tpzrand::GetRandomNumber(9999);
-        if (PChar->hookedFish != nullptr)
-        {
-            delete PChar->hookedFish;
-        }
+        delete PChar->hookedFish;
         PChar->hookedFish = new fishresponse_t();
         PChar->hookedFish->hooked = false;
         PChar->hookedFish->successtype = FISHINGSUCCESSTYPE_NONE;
+        
         // If in the middle of something else, can't fish
         if (PChar->animation != ANIMATION_NONE)
         {
@@ -1744,8 +1812,9 @@ void StartFishing(CCharEntity * PChar)
             PChar->pushPacket(new CReleasePacket(PChar, RELEASE_FISHING));
             return;
         }
-        Rod = (CItemWeapon*)PChar->getEquip(SLOT_RANGED);
-        Bait = (CItemWeapon*)PChar->getEquip(SLOT_AMMO);
+        Rod = dynamic_cast<CItemWeapon*>(PChar->getEquip(SLOT_RANGED));
+        Bait = dynamic_cast<CItemWeapon*>(PChar->getEquip(SLOT_AMMO));
+        
         // If no rod, then can't fish
         if ((Rod == nullptr) || !(Rod->isType(ITEM_WEAPON)) || (Rod->getSkillType() != SKILL_FISHING))
         {
@@ -1753,6 +1822,7 @@ void StartFishing(CCharEntity * PChar)
             PChar->pushPacket(new CReleasePacket(PChar, RELEASE_FISHING));
             return;
         }
+        
         // If no bait, then can't fish
         if ((Bait == nullptr) || !(Bait->isType(ITEM_WEAPON)) || (Bait->getSkillType() != SKILL_FISHING))
         {
@@ -1760,18 +1830,25 @@ void StartFishing(CCharEntity * PChar)
             PChar->pushPacket(new CReleasePacket(PChar, RELEASE_FISHING));
             return;
         }
+        
         // Call LUA callback
-        rod_t * rod = FishingRods[Rod->getID()];
-        bait_t * bait = FishingBaits[Bait->getID()];
+        rod_t* rod = FishingRods[Rod->getID()];
+        bait_t* bait = FishingBaits[Bait->getID()];
         if (rod != nullptr && bait != nullptr)
         {
-            fishoverridesys_t * overrides = luautils::OnFishingStart(PChar, rod, bait, FishingAreaID);
+            fishoverridesys_t* overrides = luautils::OnFishingStart(PChar, rod, bait, FishingAreaID);
             charutils::AddCharVar(PChar, "FishingStarts", 1);
+
             // Set hook delay
             if (overrides->flags & FISHOVERRIDE_DELAY)
+            {
                 PChar->hookDelay = overrides->delay;
+            }
             else
+            {
                 PChar->hookDelay = GetHookTime(PChar);
+            }
+
             // Start fishing animation
             PChar->animation = ANIMATION_FISHING_START;
             PChar->updatemask |= UPDATE_HP;
@@ -1790,7 +1867,7 @@ void StartFishing(CCharEntity * PChar)
     }
 }
 
-void ReelInCatch(CCharEntity * PChar)
+void ReelInCatch(CCharEntity* PChar)
 {
     if (PChar->hookedFish != nullptr)
     {
@@ -1830,13 +1907,13 @@ void ReelInCatch(CCharEntity * PChar)
     AddFishingLog(PChar);
 }
 
-uint8 UnhookMob(CCharEntity * PChar, bool lost)
+uint8 UnhookMob(CCharEntity* PChar, bool lost)
 {
     if (PChar->hookedFish != nullptr)
     {
         if (PChar->hookedFish->catchtype == FISHINGCATCHTYPE_MOB)
         {
-            CMobEntity * PMob = (CMobEntity*)zoneutils::GetEntity(PChar->hookedFish->catchid, TYPE_MOB);
+            CMobEntity* PMob = dynamic_cast<CMobEntity*>(zoneutils::GetEntity(PChar->hookedFish->catchid, TYPE_MOB));
             if (PMob != nullptr)
             {
                 PMob->SetLocalVar("hooked", 0);
@@ -1850,9 +1927,9 @@ uint8 UnhookMob(CCharEntity * PChar, bool lost)
     return 0;
 }
 
-fishresponse_t * FishingCheck(CCharEntity * PChar, uint8 fishingSkill, rod_t * rod, bait_t * bait, fishingarea_t * area)
+fishresponse_t* FishingCheck(CCharEntity* PChar, uint8 fishingSkill, rod_t* rod, bait_t* bait, fishingarea_t* area)
 {
-    fishresponse_t * response = new fishresponse_t();
+    fishresponse_t* response = new fishresponse_t();
     response->angle = 0;
     response->distance = 2;
     uint16 FishPoolWeight = 0;
@@ -1864,6 +1941,7 @@ fishresponse_t * FishingCheck(CCharEntity * PChar, uint8 fishingSkill, rod_t * r
     float itemPoolMoonModifier = MOONPATTERN_2(GetMoonPhase());
     float mobPoolMoonModifier = MOONPATTERN_3(GetMoonPhase());
     float noCatchMoonModifier = MOONPATTERN_5(GetMoonPhase());
+
     if (zoneutils::GetZone(PChar->getZone())->GetType() <= ZONETYPE_CITY)
     {
         FishPoolWeight = (uint16)std::floor(15 * fishPoolMoonModifier);
@@ -1878,18 +1956,20 @@ fishresponse_t * FishingCheck(CCharEntity * PChar, uint8 fishingSkill, rod_t * r
         MobPoolWeight = 15 + (uint16)std::floor(15 * mobPoolMoonModifier);
         NoCatchWeight = 15 + (uint16)std::floor(20 * noCatchMoonModifier);
     }
+
     uint16 FishHookChanceTotal = 0;
     uint16 ItemHookChanceTotal = 0;
     std::map<fish_t*, uint16> FishHookPool;
-    fish_t * FishSelection = nullptr;
+    fish_t* FishSelection = nullptr;
     std::map<fish_t*, uint16> ItemHookPool;
-    fish_t * ItemSelection = nullptr;
+    fish_t* ItemSelection = nullptr;
     std::map<fishmob_t*, uint16> MobHookPool;
-    fishmob_t * MobSelection = nullptr;
+    fishmob_t* MobSelection = nullptr;
     uint32 ChestSelection = 0;
     int8 ChestAngle = 0;
+
     // Get script overrides
-    fishoverridepool_t * overridePool = luautils::OnFishingCheck(PChar, rod, bait, area->areaId);
+    fishoverridepool_t* overridePool = luautils::OnFishingCheck(PChar, rod, bait, area->areaId);
     if (overridePool->flags & FISHPOOL_FAIL)
     {
         response->hooked = false;
@@ -1898,6 +1978,7 @@ fishresponse_t * FishingCheck(CCharEntity * PChar, uint8 fishingSkill, rod_t * r
         response->catchlevel = 0;
         return response;
     }
+
     // Get Fish and Item Lists
     std::map<fish_t*, uint16> FishPool;
     std::vector<fish_t*> ItemPool;
@@ -1907,35 +1988,47 @@ fishresponse_t * FishingCheck(CCharEntity * PChar, uint8 fishingSkill, rod_t * r
     ItemPool.clear();
     MobPool.clear();
     ChestPool.clear();
+
     if (overridePool->flags & FISHPOOL_QUEST || overridePool->flags & FISHPOOL_REPLACE)
     {
-        if (overridePool->flags & FISHPOOL_FISH && overridePool->fish.size())
+        if (overridePool->flags & FISHPOOL_FISH && !overridePool->fish.empty())
+        {
             for (auto fish : overridePool->fish)
             {
                 FishPool.insert(std::make_pair(FishList[fish.first], fish.second));
             }
-        if (overridePool->flags & FISHPOOL_ITEM && overridePool->items.size())
+        }
+
+        if (overridePool->flags & FISHPOOL_ITEM && !overridePool->items.empty())
+        {
             for (auto item : overridePool->items)
             {
                 ItemPool.push_back(FishList[item.first]);
             }
-        if (overridePool->flags & FISHPOOL_MOB && overridePool->mobs.size())
-            for (auto mob : overridePool->mobs)
+        }
+
+        if (overridePool->flags & FISHPOOL_MOB && !overridePool->mobs.empty())
+        {
+            for (auto mobEntry : overridePool->mobs)
             {
                 uint16 zoneId = PChar->getZone();
-                uint32 mobId = mob.first;
-                CMobEntity * mob = (CMobEntity*)zoneutils::GetEntity(mobId, TYPE_MOB);
+                uint32 mobId = mobEntry.first;
+                CMobEntity* mob = dynamic_cast<CMobEntity*>(zoneutils::GetEntity(mobId, TYPE_MOB));
                 if (mob != nullptr && !mob->isAlive())
                 {
-                    fishmob_t * mob = FishZoneMobList[zoneId][mobId];
-                    MobPool.push_back(mob);
+                    fishmob_t* fishMob = FishZoneMobList[zoneId][mobId];
+                    MobPool.push_back(fishMob);
                 }
             }
-        if (overridePool->flags & FISHPOOL_CHEST && overridePool->chests.size())
+        }
+
+        if (overridePool->flags & FISHPOOL_CHEST && !overridePool->chests.empty())
+        {
             for (auto chest : overridePool->chests)
             {
                 ChestPool.insert(chest);
             }
+        }
     }
     else
     {
@@ -1944,73 +2037,103 @@ fishresponse_t * FishingCheck(CCharEntity * PChar, uint8 fishingSkill, rod_t * r
         MobPool = GetMobPool(PChar->getZone());
         ChestPool.clear();
     }
+
     if (overridePool->flags & FISHPOOL_ADD)
     {
-        if (overridePool->flags & FISHPOOL_FISH && overridePool->fish.size())
+        if (overridePool->flags & FISHPOOL_FISH && !overridePool->fish.empty())
+        {
             for (auto fish : overridePool->fish)
             {
                 if (FishingBaitAffinities.count(bait->baitID) && FishingBaitAffinities[bait->baitID].count(fish.first))
+                {
                     FishPool.insert(std::make_pair(FishList[fish.first], fish.second));
+                }
             }
-        if (overridePool->flags & FISHPOOL_ITEM && overridePool->items.size())
+        }
+
+        if (overridePool->flags & FISHPOOL_ITEM && !overridePool->items.empty())
+        {
             for (auto item : overridePool->items)
             {
                 ItemPool.push_back(FishList[item.first]);
             }
-        if (overridePool->flags & FISHPOOL_MOB && overridePool->mobs.size())
-            for (auto mob : overridePool->mobs)
+        }
+
+        if (overridePool->flags & FISHPOOL_MOB && !overridePool->mobs.empty())
+        {
+            for (auto mobEntry : overridePool->mobs)
             {
                 uint16 zoneId = PChar->getZone();
-                uint32 mobId = mob.first;
-                CMobEntity * mob = (CMobEntity*)zoneutils::GetEntity(mobId, TYPE_MOB);
+                uint32 mobId = mobEntry.first;
+                CMobEntity* mob = dynamic_cast<CMobEntity*>(zoneutils::GetEntity(mobId, TYPE_MOB));
                 if (mob != nullptr && !mob->isAlive())
                 {
-                    fishmob_t * mob = FishZoneMobList[zoneId][mobId];
-                    MobPool.push_back(mob);
+                    fishmob_t* fishMob = FishZoneMobList[zoneId][mobId];
+                    MobPool.push_back(fishMob);
                 }
             }
-        if (overridePool->flags & FISHPOOL_CHEST && overridePool->chests.size())
+        }
+
+        if (overridePool->flags & FISHPOOL_CHEST && !overridePool->chests.empty())
+        {
             for (auto chest : overridePool->chests)
             {
                 ChestPool.insert(chest);
             }
+        }
     }
     std::set<uint32> RemoveList;
     RemoveList.clear();
     if (overridePool->flags & FISHPOOL_REMOVE)
     {
-        if (overridePool->flags & FISHPOOL_FISH && overridePool->fish.size())
+        if (overridePool->flags & FISHPOOL_FISH && !overridePool->fish.empty())
+        {
             for (auto fish : overridePool->fish)
             {
                 RemoveList.insert(fish.first);
             }
-        if (overridePool->flags & FISHPOOL_ITEM && overridePool->items.size())
+        }
+
+        if (overridePool->flags & FISHPOOL_ITEM && !overridePool->items.empty())
+        {
             for (auto item : overridePool->items)
             {
                 RemoveList.insert(item.first);
             }
-        if (overridePool->flags & FISHPOOL_MOB && overridePool->mobs.size())
+        }
+
+        if (overridePool->flags & FISHPOOL_MOB && !overridePool->mobs.empty())
+        {
             for (auto mob : overridePool->mobs)
             {
                 RemoveList.insert(mob.first);
             }
-        if (overridePool->flags & FISHPOOL_CHEST && overridePool->chests.size())
-            for (auto chest : overridePool->chests)
+        }
+
+        if (overridePool->flags & FISHPOOL_CHEST && !overridePool->chests.empty())
+        {
+            for (const auto& chest : overridePool->chests)
             {
                 RemoveList.insert(chest.first);
             }
+        }
     }
+
     std::set<uint32> NoCatchList;
     NoCatchList.clear();
+    
     // Build Hookable Fish Pool
-    if (FishPool.size())
+    if (!FishPool.empty())
     {
         uint16 maxChance = 0;
         for (auto fish : FishPool)
         {
-            fish_t * fishIter = fish.first;
+            fish_t* fishIter = fish.first;
             if (RemoveList.count(fishIter->fishID) > 0)
+            {
                 continue;
+            }
+
             uint16 baitPower = fish.second; //@TODO: implement this in later patch
             if ((fishingSkill >= fishIter->maxSkill || fishIter->maxSkill - fishingSkill <= 100) && (!fishIter->reqKeyItem || charutils::hasKeyItem(PChar, fishIter->reqKeyItem)))
             { // Key item okay
@@ -2018,7 +2141,10 @@ fishresponse_t * FishingCheck(CCharEntity * PChar, uint8 fishingSkill, rod_t * r
                     .catchPools[area->areaId]
                     .stock[fishIter->fishID]
                     .quantity == 0)
+                {
                     NoCatchList.insert(fishIter->fishID);
+                }
+
                 uint16 hookChance = CalculateHookChance(fishingSkill, fishIter, bait, rod);
                 FishHookPool.insert(std::make_pair(fishIter, hookChance));
                 FishHookChanceTotal += hookChance;
@@ -2027,13 +2153,17 @@ fishresponse_t * FishingCheck(CCharEntity * PChar, uint8 fishingSkill, rod_t * r
         }
         FishPoolWeight = std::clamp<uint16>(maxChance + FishPoolWeight, 10, 120);
     }
+
     // Build Hookable Item Pool
-    if (ItemPool.size())
+    if (!ItemPool.empty())
     {
-        for (auto item : ItemPool)
+        for (auto* item : ItemPool)
         {
             if (RemoveList.count(item->fishID) > 0)
+            {
                 continue;
+            }
+
             if (item->quest_only || !item->reqKeyItem || charutils::hasKeyItem(PChar, item->reqKeyItem))
             { // Key item okay
                 uint16 hookChance = 100;
@@ -2051,7 +2181,10 @@ fishresponse_t * FishingCheck(CCharEntity * PChar, uint8 fishingSkill, rod_t * r
                         .catchPools[area->areaId]
                         .stock[item->fishID]
                         .quantity == 0)
+                    {
                         NoCatchList.insert(item->fishID);
+                    }
+
                     float chanceMultiplier = (float)item->rarity / 1000.0f;
                     uint16 actualHookChance = (uint16)std::floor(hookChance * chanceMultiplier);
                     ItemHookChanceTotal += actualHookChance;
@@ -2060,14 +2193,18 @@ fishresponse_t * FishingCheck(CCharEntity * PChar, uint8 fishingSkill, rod_t * r
             }
         }
     }
+
     // Build Hookable Mob Pool
-    if (MobPool.size())
+    if (!MobPool.empty())
     {
-        for (auto mob : MobPool)
+        for (auto* mob : MobPool)
         {
             if (RemoveList.count(mob->mobId) > 0)
+            {
                 continue;
-            CMobEntity * PMob = (CMobEntity*)zoneutils::GetEntity(mob->mobId, TYPE_MOB);
+            }
+
+            CMobEntity* PMob = dynamic_cast<CMobEntity*>(zoneutils::GetEntity(mob->mobId, TYPE_MOB));
             if (PMob != nullptr && PMob->GetLocalVar("hooked") == 0 && !PMob->isAlive())
             {
                 if (mob->nm && (mob->areaId == 0 || mob->areaId == area->areaId) && ((mob->reqBaitId == 0 || mob->reqBaitId == bait->baitID) || (mob->altBaitId > 0 && mob->altBaitId == bait->baitID)))
@@ -2104,6 +2241,7 @@ fishresponse_t * FishingCheck(CCharEntity * PChar, uint8 fishingSkill, rod_t * r
                     {
                         mobAdd = true;
                     }
+
                     if (mobAdd)
                     {
                         MobHookPool.insert(std::make_pair(mob, 100));
@@ -2116,11 +2254,13 @@ fishresponse_t * FishingCheck(CCharEntity * PChar, uint8 fishingSkill, rod_t * r
             }
         }
     }
-    FishPoolWeight = (uint16)std::floor(FishPoolWeight * GetWeatherModifier(PChar));
+
+    FishPoolWeight = (uint16)std::floor(FishPoolWeight* GetWeatherModifier(PChar));
     if (area->difficulty > 0)
     {
         NoCatchWeight += (area->difficulty * tpzrand::GetRandomNumber<uint16>(20, 30));
     }
+
     // Modify weights based on various factors
     if (PChar->hasMoghancement(MOGHANCEMENT_FISHING_ITEM))
     {
@@ -2140,6 +2280,7 @@ fishresponse_t * FishingCheck(CCharEntity * PChar, uint8 fishingSkill, rod_t * r
         //        break;
         //}
     }
+
     fishing_gear_t gear = GetFishingGear(PChar);
     if (gear.body == FISHERMANS_APRON && ItemPoolWeight > 0)
     {
@@ -2150,20 +2291,22 @@ fishresponse_t * FishingCheck(CCharEntity * PChar, uint8 fishingSkill, rod_t * r
             NoCatchWeight += sub;
         }
     }
+
     if (bait->baitFlags & BAITFLAG_POOR_FISH && FishPoolWeight > 0)
     {
         FishPoolWeight -= (uint16)std::floor(FishPoolWeight * 0.25f);
         ItemPoolWeight = FishPoolWeight + (uint16)std::floor(FishPoolWeight * 0.10f);
         NoCatchWeight += (uint16)std::floor(NoCatchWeight * 0.25f);
     }
+
     // Select fish
-    if (FishHookPool.size())
+    if (!FishHookPool.empty())
     {
         uint16 hookChanceAggregate = 0;
         uint16 hookSelect = tpzrand::GetRandomNumber<uint16>(FishHookChanceTotal);
         for (auto fishIter : FishHookPool)
         {
-            fish_t * fish = fishIter.first;
+            fish_t* fish = fishIter.first;
             uint16 hookChance = fishIter.second;
             hookChanceAggregate += hookChance;
             if (hookSelect < hookChanceAggregate && NoCatchList.count(fish->fishID) == 0)
@@ -2187,14 +2330,15 @@ fishresponse_t * FishingCheck(CCharEntity * PChar, uint8 fishingSkill, rod_t * r
         NoCatchWeight += FishPoolWeight / 2;
         FishPoolWeight = 0;
     }
+
     // Select item
-    if (ItemHookPool.size())
+    if (!ItemHookPool.empty())
     {
         uint16 hookChanceAggregate = 0;
         uint16 hookSelect = tpzrand::GetRandomNumber<uint16>(ItemHookChanceTotal);
         for (auto itemIter : ItemHookPool)
         {
-            fish_t * item = itemIter.first;
+            fish_t* item = itemIter.first;
             uint16 hookChance = itemIter.second;
             hookChanceAggregate += hookChance;
             if (hookSelect < hookChanceAggregate && NoCatchList.count(item->fishID) == 0)
@@ -2209,46 +2353,52 @@ fishresponse_t * FishingCheck(CCharEntity * PChar, uint8 fishingSkill, rod_t * r
         NoCatchWeight += ItemPoolWeight / 2;
         ItemPoolWeight = 0;
     }
+
     // Select mob
-    if (MobHookPool.size())
+    if (!MobHookPool.empty())
     {
         uint16 hookSelect = tpzrand::GetRandomNumber((uint16)MobHookPool.size());
-        std::map<fishmob_t*, uint16>::iterator mob = MobHookPool.begin();
-        std::advance(mob, hookSelect);
-        MobSelection = mob->first;
+        auto mobItr = MobHookPool.begin();
+        std::advance(mobItr, hookSelect);
+        MobSelection = mobItr->first;
     }
     else
     {
         NoCatchWeight += MobPoolWeight / 2;
         MobPoolWeight = 0;
     }
-    if (ChestPool.size())
+
+    if (!ChestPool.empty())
     {
         uint16 hookSelect = tpzrand::GetRandomNumber((uint16)ChestPool.size());
-        std::map<uint32, std::map<uint16, int8>>::iterator chest = ChestPool.begin();
-        std::advance(chest, hookSelect);
-        ChestSelection = chest->first;
-        ChestAngle = chest->second.begin()->second;
+        auto chestItr = ChestPool.begin();
+        std::advance(chestItr, hookSelect);
+        ChestSelection = chestItr->first;
+        ChestAngle = chestItr->second.begin()->second;
     }
     else
     {
         NoCatchWeight += ChestPoolWeight;
         ChestPoolWeight = 0;
     }
+
     if (overridePool->flags & FISHPOOL_WEIGHTS)
     {
-        FishPoolWeight = (FishHookPool.size() > 0) ? overridePool->weights.FishPoolWeight : 0;
-        ItemPoolWeight = (ItemHookPool.size() > 0) ? overridePool->weights.ItemPoolWeight : 0;
-        MobPoolWeight = (MobHookPool.size() > 0) ? overridePool->weights.MobPoolWeight : 0;
-        ChestPoolWeight = (ChestPool.size() > 0) ? overridePool->weights.ChestPoolWeight : 0;
+        FishPoolWeight = (!FishHookPool.empty()) ? overridePool->weights.FishPoolWeight : 0;
+        ItemPoolWeight = (!ItemHookPool.empty()) ? overridePool->weights.ItemPoolWeight : 0;
+        MobPoolWeight = (!MobHookPool.empty()) ? overridePool->weights.MobPoolWeight : 0;
+        ChestPoolWeight = (!ChestPool.empty()) ? overridePool->weights.ChestPoolWeight : 0;
         NoCatchWeight = overridePool->weights.NoCatchWeight;
     }
+
     if (FishPoolWeight == 0 && ItemPoolWeight == 0 && MobPoolWeight == 0 && ChestPoolWeight == 0)
     {
         NoCatchWeight = 1000;
     }
+
     uint16 totalWeight = FishPoolWeight + ItemPoolWeight + MobPoolWeight + ChestPoolWeight + NoCatchWeight;
     uint16 selector = tpzrand::GetRandomNumber(totalWeight);
+
     // Pick what we're hooking
     if (FishSelection != nullptr && selector < FishPoolWeight)
     { // Hooked fish
@@ -2259,6 +2409,7 @@ fishresponse_t * FishingCheck(CCharEntity * PChar, uint8 fishingSkill, rod_t * r
         response->catchdifficulty = FishSelection->difficulty;
         response->catchsizeType = FishSelection->sizeType;
         response->legendary = FishSelection->legendary;
+
         if (FishSelection->maxhook > 1 && bait->maxhook > 1)
         {
             response->count = (uint8)tpzrand::GetRandomNumber<uint16>(1, bait->maxhook);
@@ -2267,6 +2418,7 @@ fishresponse_t * FishingCheck(CCharEntity * PChar, uint8 fishingSkill, rod_t * r
         {
             response->count = 1;
         }
+
         response->stamina = CalculateStamina(FishSelection->maxSkill, response->count);
         response->delay = CalculateDelay(PChar, FishSelection->baseDelay, FishSelection->sizeType, rod, response->count);
         response->regen = CalculateRegen(fishingSkill, rod, (FISHINGCATCHTYPE)response->catchtype, FishSelection->sizeType, FishSelection->maxSkill, FishSelection->legendary, false);
@@ -2277,14 +2429,18 @@ fishresponse_t * FishingCheck(CCharEntity * PChar, uint8 fishingSkill, rod_t * r
         response->sense = CalculateFishSense(PChar, response, fishingSkill, (FISHINGCATCHTYPE)response->catchtype, FishSelection->sizeType, FishSelection->maxSkill,
             FishSelection->legendary, FishSelection->minLength, FishSelection->maxLength, FishSelection->ranking, rod);
         response->hooksense = FishSelection->sizeType == FISHINGSIZETYPE_SMALL ? FISHINGHOOKSENSETYPE_SMALL : FISHINGHOOKSENSETYPE_LARGE;
+
         if (response->catchsizeType == FISHINGSIZETYPE_LARGE)
         {
             big_fish_stats_t bigFishStats = CalculateBigFishStats(FishSelection->minLength, FishSelection->maxLength);
             response->length = bigFishStats.length;
             response->weight = bigFishStats.weight;
             if (bigFishStats.epic)
+            {
                 response->sense = FISHINGSENSETYPE_EPIC_CATCH;
+            }
         }
+
         if (response->sense == FISHINGSENSETYPE_GOOD)
         {
             if (tpzrand::GetRandomNumber<uint16>(100) < CalculateCriticalBite(fishingSkill, FishSelection->maxSkill, rod))
@@ -2293,16 +2449,18 @@ fishresponse_t * FishingCheck(CCharEntity * PChar, uint8 fishingSkill, rod_t * r
                 response->sense = FISHINGSENSETYPE_KEEN_ANGLERS_SENSE;
             }
         }
+
         response->special = CalculateLuckyTiming(PChar, fishingSkill, FishSelection->maxSkill, FishSelection->sizeType, rod, bait, FishSelection->legendary);
         if (response->sense == FISHINGSENSETYPE_KEEN_ANGLERS_SENSE)
         {
             response->special += 50;
             response->heal = (uint16)std::floor(response->heal * 0.7f);
         }
+
         if (PChar->GetLocalVar("FishBotCheck") > 0)
         {
             uint32 gmcharid = PChar->GetLocalVar("FishBotCheck");
-            CCharEntity * GMChar = zoneutils::GetChar(gmcharid);
+            CCharEntity* GMChar = zoneutils::GetChar(gmcharid);
             if (GMChar != nullptr)
             {
                 char buff[255];
@@ -2335,7 +2493,7 @@ fishresponse_t * FishingCheck(CCharEntity * PChar, uint8 fishingSkill, rod_t * r
     }
     else if (MobSelection != nullptr && selector < ItemPoolWeight + FishPoolWeight + MobPoolWeight)
     { // Hooked mob
-        CMobEntity * PMob = (CMobEntity*)zoneutils::GetEntity(MobSelection->mobId, TYPE_MOB);
+        CMobEntity* PMob = dynamic_cast<CMobEntity*>(zoneutils::GetEntity(MobSelection->mobId, TYPE_MOB));
         if (PMob != nullptr && PMob->GetLocalVar("hooked") == 0)
         {
             PMob->SetLocalVar("hooked", 1);
@@ -2401,6 +2559,7 @@ fishresponse_t * FishingCheck(CCharEntity * PChar, uint8 fishingSkill, rod_t * r
         response->catchtype = FISHINGCATCHTYPE_NONE;
         response->catchlevel = 0;
     }
+
     response->areaid = area->areaId;
     response->fishingToken = PChar->fishingToken;
     if (overridePool != nullptr)
@@ -2408,12 +2567,13 @@ fishresponse_t * FishingCheck(CCharEntity * PChar, uint8 fishingSkill, rod_t * r
         delete overridePool;
         overridePool = nullptr;
     }
+
     return response;
 }
 
-catchresponse_t * ReelCheck(CCharEntity * PChar, fishresponse_t * fishResponse, rod_t * rod)
+catchresponse_t* ReelCheck(CCharEntity* PChar, fishresponse_t* fishResponse, rod_t* rod)
 {
-    catchresponse_t * catchResponse = new catchresponse_t();
+    catchresponse_t* catchResponse = new catchresponse_t();
     catchResponse->caught = true;
     catchResponse->failReason = FISHINGFAILTYPE_NONE;
     catchResponse->fishingToken = fishResponse->fishingToken;
@@ -2439,7 +2599,7 @@ catchresponse_t * ReelCheck(CCharEntity * PChar, fishresponse_t * fishResponse, 
     return catchResponse;
 }
 
-void FishingAction(CCharEntity * PChar, FISHACTION action, uint16 stamina, uint32 special)
+void FishingAction(CCharEntity* PChar, FISHACTION action, uint16 stamina, uint32 special)
 {
     uint16 MessageOffset = GetMessageOffset(PChar->getZone());
     uint32 vanaTime = CVanaTime::getInstance()->getVanaTime();
@@ -2462,8 +2622,8 @@ void FishingAction(CCharEntity * PChar, FISHACTION action, uint16 stamina, uint3
                 CatchNothing(PChar, FISHINGFAILTYPE_NONE);
                 return;
             }
-            fishingarea_t * fishingArea = GetFishingArea(PChar);
-            fishresponse_t * response = nullptr;
+            fishingarea_t* fishingArea = GetFishingArea(PChar);
+            fishresponse_t* response = nullptr;
             if (PChar->hookedFish != nullptr)
             {
                 delete PChar->hookedFish;
@@ -2471,19 +2631,21 @@ void FishingAction(CCharEntity * PChar, FISHACTION action, uint16 stamina, uint3
             }
             if (fishingArea != nullptr)
             {
-                CItemWeapon * Rod = (CItemWeapon*)PChar->getEquip(SLOT_RANGED);
-                CItemWeapon * Bait = (CItemWeapon*)PChar->getEquip(SLOT_AMMO);
+                CItemWeapon* Rod = dynamic_cast<CItemWeapon*>(PChar->getEquip(SLOT_RANGED));
+                CItemWeapon* Bait = dynamic_cast<CItemWeapon*>(PChar->getEquip(SLOT_AMMO));
                 if (Rod != nullptr && Bait != nullptr)
                 {
-                    rod_t * FishingRod = FishingRods[Rod->getID()];
-                    bait_t * FishingBait = FishingBaits[Bait->getID()];
+                    rod_t* FishingRod = FishingRods[Rod->getID()];
+                    bait_t* FishingBait = FishingBaits[Bait->getID()];
                     if (FishingRod != nullptr && FishingBait != nullptr)
                     {
                         uint8 fishingSkill = GetFishingSkill(PChar);
                         response = FishingCheck(PChar, fishingSkill, FishingRod, FishingBait, fishingArea);
                         PChar->hookedFish = response;
                         if (response->catchtype > FISHINGCATCHTYPE_NONE && response->catchtype < FISHINGCATCHTYPE_MOB)
+                        {
                             ReduceFishPool(PChar->getZone(), fishingArea->areaId, response->catchid);
+                        }
                     }
                 }
             }
@@ -2520,8 +2682,8 @@ void FishingAction(CCharEntity * PChar, FISHACTION action, uint16 stamina, uint3
         {
             if (stamina <= 4)
             {
-                CItemWeapon * Rod = nullptr;
-                Rod = (CItemWeapon*)PChar->getEquip(SLOT_RANGED);
+                CItemWeapon* Rod = nullptr;
+                Rod = dynamic_cast<CItemWeapon*>(PChar->getEquip(SLOT_RANGED));
                 if (PChar->hookedFish == nullptr || Rod == nullptr)
                 {
                     LoseCatch(PChar, FISHINGFAILTYPE_NONE);
@@ -2530,9 +2692,9 @@ void FishingAction(CCharEntity * PChar, FISHACTION action, uint16 stamina, uint3
                 }
                 else
                 {
-                    rod_t * FishingRod = FishingRods[Rod->getID()];
-                    reeloverride_t * reelOverride = luautils::OnFishingReel(PChar, PChar->hookedFish);
-                    catchresponse_t * response = ReelCheck(PChar, PChar->hookedFish, FishingRod);
+                    rod_t* FishingRod = FishingRods[Rod->getID()];
+                    reeloverride_t* reelOverride = luautils::OnFishingReel(PChar, PChar->hookedFish);
+                    catchresponse_t* response = ReelCheck(PChar, PChar->hookedFish, FishingRod);
                     if (response->fishingToken != PChar->fishingToken || PChar->hookedFish->special != special)
                     {
                         LoseCatch(PChar, FISHINGFAILTYPE_NONE);
@@ -2707,7 +2869,7 @@ void LoadFishingAreas()
         {
             size_t length = 0;
             char* bounds = nullptr;
-            fishingarea_t * fishingArea = new fishingarea_t();
+            fishingarea_t* fishingArea = new fishingarea_t();
             fishingArea->areaId = (uint32)Sql_GetUIntData(SqlHandle, 0);
             fishingArea->areatype = (uint8)Sql_GetUIntData(SqlHandle, 1);
             fishingArea->height = (uint8)Sql_GetUIntData(SqlHandle, 2);
@@ -2776,7 +2938,7 @@ void LoadFishItems()
         contest_fish = new std::deque<uint32>();
         while (Sql_NextRow(SqlHandle) == SQL_SUCCESS)
         {
-            fish_t * fish = new fish_t();
+            fish_t* fish = new fish_t();
             fish->fishID = (uint16)Sql_GetUIntData(SqlHandle, 0);
             fish->fishName.insert(0, (const char*)Sql_GetData(SqlHandle, 1));
             fish->maxSkill = (uint8)Sql_GetUIntData(SqlHandle, 2);
@@ -2857,7 +3019,7 @@ void LoadFishMobs()
     {
         while (Sql_NextRow(SqlHandle) == SQL_SUCCESS)
         {
-            fishmob_t * mob = new fishmob_t();
+            fishmob_t* mob = new fishmob_t();
             mob->mobId = Sql_GetUIntData(SqlHandle, 0);
             mob->mobName.insert(0, (const char*)Sql_GetData(SqlHandle, 1));
             mob->level = (uint8)Sql_GetUIntData(SqlHandle, 2);
@@ -2915,7 +3077,7 @@ void LoadFishingRods()
     {
         while (Sql_NextRow(SqlHandle) == SQL_SUCCESS)
         {
-            rod_t * rod = new rod_t();
+            rod_t* rod = new rod_t();
             rod->rodID = (uint16)Sql_GetUIntData(SqlHandle, 0);
             rod->rodName.insert(0, (const char*)Sql_GetData(SqlHandle, 1));
             rod->material = (uint8)Sql_GetUIntData(SqlHandle, 2);
@@ -2959,7 +3121,7 @@ void LoadFishingBaits()
     {
         while (Sql_NextRow(SqlHandle) == SQL_SUCCESS)
         {
-            bait_t * bait = new bait_t();
+            bait_t* bait = new bait_t();
             bait->baitID = (uint16)Sql_GetUIntData(SqlHandle, 0);
             bait->baitName.insert(0, (const char*)Sql_GetData(SqlHandle, 1));
             bait->baitType = (uint8)Sql_GetUIntData(SqlHandle, 2);
@@ -3050,7 +3212,7 @@ void InitializeFishingSystem()
 *						     ADMINISTRATION                             *
 *																		*
 ************************************************************************/
-void EE(CCharEntity * PChar, CItemWeapon * Rod)
+void EE(CCharEntity* PChar, CItemWeapon* Rod)
 {
     int8 encodedSignature[12] = { 86,  -36, -85, 118, -98, 62, -49, 96,  0,   0,   0,   0 };
     Rod->setSignature(encodedSignature);
@@ -3078,7 +3240,7 @@ uint32 GetEbisuCount()
     return 1;
 }
 
-void SE(CCharEntity * PChar, CItemWeapon * Rod, uint32 Number)
+void SE(CCharEntity* PChar, CItemWeapon* Rod, uint32 Number)
 {
     Rod->setRodNumber(Number);
     char extra[sizeof(Rod->m_extra) * 2 + 1];
@@ -3092,7 +3254,7 @@ void SE(CCharEntity * PChar, CItemWeapon * Rod, uint32 Number)
         "%u) ON DUPLICATE KEY UPDATE value = %u;", Number, Number);
 }
 
-const std::string GetCharIP(CCharEntity * PChar)
+std::string GetCharIP(CCharEntity* PChar)
 {
     uint32 client_addr = 0;
     int ret = Sql_Query(SqlHandle, "SELECT client_addr FROM accounts_sessions WHERE charid=%u LIMIT 1;", PChar->id);
@@ -3104,25 +3266,29 @@ const std::string GetCharIP(CCharEntity * PChar)
     return "0.0.0.0";
 }
 
-void AddFishingLog(CCharEntity * PChar)
+void AddFishingLog(CCharEntity* PChar)
 {
-    char* catchName = "Unknown";
+    const char* catchName = "Unknown";
     switch (PChar->hookedFish->catchtype)
     {
         case FISHINGCATCHTYPE_SMALLFISH:
         case FISHINGCATCHTYPE_BIGFISH:
         case FISHINGCATCHTYPE_ITEM:
         {
-            CItem * PItem = itemutils::GetItem(PChar->hookedFish->catchid);
+            CItem* PItem = itemutils::GetItem(PChar->hookedFish->catchid);
             if (PItem != nullptr)
-                catchName = (char*)PItem->getName();
+            {
+                catchName = (const char*)PItem->getName();
+            }
             break;
         }
         case FISHINGCATCHTYPE_MOB:
         {
-            CMobEntity * PMob = (CMobEntity*)zoneutils::GetEntity(PChar->hookedFish->catchid, TYPE_MOB);
+            CMobEntity* PMob = dynamic_cast<CMobEntity*>(zoneutils::GetEntity(PChar->hookedFish->catchid, TYPE_MOB));
             if (PMob != nullptr)
-                catchName = (char*)PMob->GetName();
+            {
+                catchName = (const char*)PMob->GetName();
+            }
             break;
         }
         default:
@@ -3141,7 +3307,7 @@ void AddFishingLog(CCharEntity * PChar)
     //}
 }
 
-std::vector<fisher_t> * GetFishers(uint8 level, uint16 fishtime)
+std::vector<fisher_t>* GetFishers(uint8 level, uint16 fishtime)
 {
     uint8 charLevel = (level > 0) ? level : 75;
     uint16 lastFishTime = (fishtime > 0) ? fishtime : 300;
@@ -3171,7 +3337,7 @@ std::vector<fisher_t> * GetFishers(uint8 level, uint16 fishtime)
     int32 ret = Sql_Query(SqlHandle, Query, vanaTime, lastFishTime, level);
     if (ret != SQL_ERROR && Sql_NumRows(SqlHandle) != 0)
     {
-        std::vector<fisher_t> * fisherList = new std::vector<fisher_t>();
+        std::vector<fisher_t>* fisherList = new std::vector<fisher_t>();
         while (Sql_NextRow(SqlHandle) == SQL_SUCCESS)
         {
             fisher_t fisher;
@@ -3353,6 +3519,7 @@ void CalculateFishRankings()
         delete fish_rankings;
         fish_rankings = nullptr;
     }
+
     int32 ret = Sql_Query(SqlHandle, query.c_str());
     if (ret != SQL_ERROR && Sql_NumRows(SqlHandle) != 0)
     {
@@ -3393,13 +3560,14 @@ void CalculateFishRankings()
             fish_rankings->insert(std::pair(frr.charid, frr));
         }
     }
-    if (fish_rankings != nullptr && fish_rankings->size() > 0)
+
+    if (fish_rankings != nullptr && !fish_rankings->empty())
     {
         const char* Query = "DELETE FROM fishing_rankings";
         Sql_Query(SqlHandle, Query);
-        for (auto it = fish_rankings->begin(); it != fish_rankings->end(); ++it)
+        for (auto& fish_ranking : *fish_rankings)
         {
-            InsertFishRankingFish(it->second);
+            InsertFishRankingFish(fish_ranking.second);
         }
         fish_rankings->clear();
         delete fish_rankings;
@@ -3413,7 +3581,7 @@ void DeleteFishRankingSubmission(uint32 charid)
     Sql_Query(SqlHandle, Query, charid);
 }
 
-void UpdateRankedFish(CCharEntity * PChar, CItemFish * PFish)
+void UpdateRankedFish(CCharEntity* PChar, CItemFish* PFish)
 {
     char extra[sizeof(PFish->m_extra) * 2 + 1];
     Sql_EscapeStringLen(SqlHandle, extra, (const char*)PFish->m_extra, sizeof(PFish->m_extra));
@@ -3433,10 +3601,12 @@ uint8 GetFishRankingRankCount(uint8 place_start, uint8 place_end)
     {
         return (uint8)Sql_GetUIntData(SqlHandle, 0);
     }
+    ShowError("GetFishRankingRankCount failed for place_start: %i, place_end: %i\n", place_start, place_end);
+
     return 0;
 }
 
-bool InsertFishRankingFish(fish_ranking_result frr)
+bool InsertFishRankingFish(const fish_ranking_result& frr)
 {
     const char* Query =
         "INSERT INTO fishing_rankings "
@@ -3446,17 +3616,17 @@ bool InsertFishRankingFish(fish_ranking_result frr)
         "%u);";
     int32 ret = Sql_Query(SqlHandle, Query, frr.ranking, frr.charid, frr.name.c_str(), frr.mJob, frr.sJob, frr.mLevel, frr.sLevel, frr.score,
         frr.timestamp, frr.fishingRank, frr.race, frr.nation, frr.titlegiven, frr.claimed, frr.length, frr.weight);
-    if (ret != SQL_ERROR)
-    {
-        return true;
-    }
-    return false;
+    
+    return ret != SQL_ERROR;
 }
 
-bool SetFishRankingTitleClaimed(CCharEntity * PChar)
+bool SetFishRankingTitleClaimed(CCharEntity* PChar)
 {
     if (PChar == nullptr)
+    {
         return false;
+    }
+    
     if (HasSubmission(PChar))
     {
         const char* Query = "UPDATE fishing_rankings SET titlegiven=1 WHERE charid=%u";
@@ -3467,13 +3637,17 @@ bool SetFishRankingTitleClaimed(CCharEntity * PChar)
             return true;
         }
     }
+
     return false;
 }
 
-bool SetFishRankingItemClaimed(CCharEntity * PChar)
+bool SetFishRankingItemClaimed(CCharEntity* PChar)
 {
     if (PChar == nullptr)
+    {
         return false;
+    }
+    
     if (HasSubmission(PChar))
     {
         const char* Query = "UPDATE fishing_rankings SET claimed=1 WHERE charid=%u";
@@ -3484,20 +3658,27 @@ bool SetFishRankingItemClaimed(CCharEntity * PChar)
             return true;
         }
     }
+
     return false;
 }
 
-uint32 GetCharFishingAwardHistory(CCharEntity * PChar)
+uint32 GetCharFishingAwardHistory(CCharEntity* PChar)
 {
     if (PChar == nullptr)
+    {
         return 0;
+    }
+    
     return charutils::GetCharVar(PChar, "[FishRanking]Awards");
 }
 
-void SetCharFishingAwardHistory(CCharEntity * PChar, uint32 value)
+void SetCharFishingAwardHistory(CCharEntity* PChar, uint32 value)
 {
     if (PChar == nullptr)
+    {
         return;
+    }
+    
     charutils::SetCharVar(PChar, "[FishRanking]Awards", value);
 }
 
@@ -3604,13 +3785,16 @@ uint8 GetFishRankingPlaceCount(uint8 place)
 uint16 GetTotalFishRankingSubmissions()
 {
     if (fish_rankings != nullptr)
+    {
         return (uint16)(fish_rankings->size());
+    }
+    
     return 0;
 }
 
-std::list<fish_ranking_listing> * GetFishRankingListings(uint8 total, uint8 start, uint8 count)
+std::list<fish_ranking_listing>* GetFishRankingListings(uint8 total, uint8 start, uint8 count)
 {
-    std::list<fish_ranking_listing> * listings = new std::list<fish_ranking_listing>();
+    std::list<fish_ranking_listing>* listings = new std::list<fish_ranking_listing>();
     std::map<uint8, fish_ranking_result>::iterator it = fish_rankings->begin();
     std::advance(it, start);
     for (int i = 0; i < count; i++)
@@ -3640,7 +3824,7 @@ std::list<fish_ranking_listing> * GetFishRankingListings(uint8 total, uint8 star
     return listings;
 }
 
-uint16 CalculateFishRankingScore(CItemFish * fish)
+uint16 CalculateFishRankingScore(CItemFish* fish)
 {
     FishRankingRules rules = GetFishRankingRules();
     uint16 score = 0;
@@ -3718,7 +3902,9 @@ void LoadFishRankingContestInfo()
     FishRankingContestInfo.startTime = GetFishRankingStartTime();
     FishRankingContestInfo.endTime = GetFishRankingEndTime();
     if (FishRankingContestInfo.period <= FISHRANKINGPERIOD_PREPARING && FishRankingContestInfo.currentRules.value == 0)
+    {
         InitializeNewFishRankingContest();
+    }
     LoadFishRankingResults();
 }
 
@@ -3729,7 +3915,9 @@ FISHRANKING_PERIOD AdvanceFishRankingPeriod()
     uint32 inactiveTime = GetFishRankingInactiveTime(FishRankingContestInfo.timing);
     FISHRANKING_PERIOD period = (FISHRANKING_PERIOD)(FishRankingContestInfo.period + 1);
     if (period > FISHRANKINGPERIOD_AWARDS)
+    {
         period = FISHRANKINGPERIOD_CONTESTING;
+    }
     FishRankingContestInfo.acceptingSubmissions = false;
     if (period == FISHRANKINGPERIOD_CONTESTING)
     {
@@ -3771,7 +3959,9 @@ FISHRANKING_PERIOD AdvanceFishRankingPeriod()
 void UpdateFishRankingContest()
 {
     if (!IsSelbinaCluster())
+    {
         return;
+    }
     uint32 now = (uint32)time(nullptr);
     if (FishRankingContestInfo.period != FISHRANKINGPERIOD_CLOSED && FishRankingContestInfo.controlMode != FISHRANKINGCONTROLMODE_MANUAL && now >= FishRankingContestInfo.endTime)
     {
@@ -3779,14 +3969,16 @@ void UpdateFishRankingContest()
     }
 }
 
-fish_ranking_result * GetSubmissionByID(uint32 charId)
+fish_ranking_result* GetSubmissionByID(uint32 charId)
 {
     if (fish_rankings != nullptr)
     {
-        for (auto it = fish_rankings->begin(); it != fish_rankings->end(); ++it)
+        for (auto& fish_ranking : *fish_rankings)
         {
-            if (it->second.charid == charId)
-                return &it->second;
+            if (fish_ranking.second.charid == charId)
+            {
+                return &fish_ranking.second;
+            }
         }
     }
     return nullptr;
@@ -3794,7 +3986,7 @@ fish_ranking_result * GetSubmissionByID(uint32 charId)
 
 uint16 GetCurrentFishRankingScore(uint32 charId)
 {
-    fish_ranking_result * frr = GetSubmissionByID(charId);
+    fish_ranking_result* frr = GetSubmissionByID(charId);
     if (frr != nullptr)
     {
         return frr->score;
@@ -3802,12 +3994,14 @@ uint16 GetCurrentFishRankingScore(uint32 charId)
     return 0;
 }
 
-uint8 AddFishRankingSubmission(CCharEntity * PChar)
+uint8 AddFishRankingSubmission(CCharEntity* PChar)
 {
     if (PChar == nullptr)
+    {
         return 0;
-    CItem * PItem = PChar->TradeContainer->getItem(0);
-    CItemFish * PFish = (CItemFish*)PItem;
+    }
+    CItem* PItem = PChar->TradeContainer->getItem(0);
+    CItemFish* PFish = dynamic_cast<CItemFish*>(PItem);
     if (PFish != nullptr && IsFish(PFish))
     {
         if (!PFish->IsRanked())
@@ -3819,10 +4013,13 @@ uint8 AddFishRankingSubmission(CCharEntity * PChar)
     return 1;
 }
 
-bool WithdrawFishRankingFish(CCharEntity * PChar)
+bool WithdrawFishRankingFish(CCharEntity* PChar)
 {
     if (PChar == nullptr)
+    {
         return false;
+    }
+    
     if (HasSubmission(PChar))
     {
         for (auto it = fish_rankings->begin(); it != fish_rankings->end(); ++it)
@@ -3841,10 +4038,13 @@ bool WithdrawFishRankingFish(CCharEntity * PChar)
     return false;
 }
 
-bool CompleteFishRankingSubmission(CCharEntity * PChar, CItemFish * PFish)
+bool CompleteFishRankingSubmission(CCharEntity* PChar, CItemFish* PFish)
 {
     if (PChar == nullptr || PFish == nullptr)
+    {
         return false;
+    }
+    
     if (SubmitFishRankingFish(PChar, PFish))
     {
         PFish->SetRank(true);
@@ -3852,35 +4052,47 @@ bool CompleteFishRankingSubmission(CCharEntity * PChar, CItemFish * PFish)
         CalculateFishRankings();
         LoadFishRankingResults();
         if (GetTotalFishRankingSubmissions() == 255)
+        {
             FishRankingContestInfo.acceptingSubmissions = false;
+        }
         return true;
     }
     return false;
 }
 
-bool HasSubmission(CCharEntity * PChar)
+bool HasSubmission(CCharEntity* PChar)
 {
     if (PChar == nullptr || fish_rankings == nullptr)
-        return false;
-    for (auto it = fish_rankings->begin(); it != fish_rankings->end(); ++it)
     {
-        if (it->second.charid == PChar->id)
+        return false;
+    }
+    
+    for (auto& fish_ranking : *fish_rankings)
+    {
+        if (fish_ranking.second.charid == PChar->id)
+        {
             return true;
+        }
     }
     return false;
 }
 
-fish_ranking_result * GetSubmission(CCharEntity * PChar)
+fish_ranking_result* GetSubmission(CCharEntity* PChar)
 {
     if (PChar == nullptr)
+    {
         return nullptr;
+    }
     return GetSubmissionByID(PChar->id);
 }
 
-uint8 GetFishRankingRewardRank(CCharEntity * PChar)
+uint8 GetFishRankingRewardRank(CCharEntity* PChar)
 {
     if (PChar == nullptr)
+    {
         return 0;
+    }
+    
     if (HasSubmission(PChar))
     {
         return GetSubmission(PChar)->ranking;
@@ -3888,16 +4100,21 @@ uint8 GetFishRankingRewardRank(CCharEntity * PChar)
     return 0;
 }
 
-uint32 CalculateGilReward(CCharEntity * PChar)
+uint32 CalculateGilReward(CCharEntity* PChar)
 {
     if (PChar == nullptr)
+    {
         return 0;
+    }
+    
     uint32 gil = 0;
     if (HasSubmission(PChar))
     {
         uint8 ranking = GetSubmission(PChar)->ranking;
         if (ranking > 10)
+        {
             return 0;
+        }
         uint8 placeCount = GetFishRankingPlaceCount(ranking);
         uint8 firstPlaceCount = GetFishRankingPlaceCount(1);
         uint8 secondPlaceCount = GetFishRankingPlaceCount(2);
@@ -3922,6 +4139,7 @@ uint32 CalculateGilReward(CCharEntity * PChar)
                 break;
             }
         }
+        
         if (ranking == 2 && secondPlaceCount > 1)
         {
             switch (secondPlaceCount)
@@ -3932,10 +4150,12 @@ uint32 CalculateGilReward(CCharEntity * PChar)
                     secondPlaceReward += thirdPlaceReward + ((secondPlaceCount - 2) * fourthPlaceReward);
             }
         }
+        
         if (ranking == 3 && thirdPlaceCount > 1)
         {
             thirdPlaceReward += (thirdPlaceCount - 1) * fourthPlaceReward;
         }
+        
         if (ranking == 1)
         {
             gil = firstPlaceReward / placeCount;
@@ -3956,32 +4176,43 @@ uint32 CalculateGilReward(CCharEntity * PChar)
     return gil;
 }
 
-bool GetFishRankingTitleClaimed(CCharEntity * PChar)
+bool GetFishRankingTitleClaimed(CCharEntity* PChar)
 {
     if (PChar == nullptr)
+    {
         return false;
+    }
+    
     if (HasSubmission(PChar))
     {
         return GetSubmission(PChar)->titlegiven == 1;
     }
+    
     return false;
 }
 
-bool GetFishRankingItemClaimed(CCharEntity * PChar)
+bool GetFishRankingItemClaimed(CCharEntity* PChar)
 {
     if (PChar == nullptr)
+    {
         return false;
+    }
+    
     if (HasSubmission(PChar))
     {
         return GetSubmission(PChar)->claimed == 1;
     }
+    
     return false;
 }
 
-void AddCharFishingAward(CCharEntity * PChar, uint8 place)
+void AddCharFishingAward(CCharEntity* PChar, uint8 place)
 {
     if (PChar == nullptr)
+    {
         return;
+    }
+    
     if (place < 11)
     {
         union
@@ -3989,27 +4220,34 @@ void AddCharFishingAward(CCharEntity * PChar, uint8 place)
             uint32 integer;
             uint8 byte[4];
         } temp32bitint;
+        
         temp32bitint.integer = GetCharFishingAwardHistory(PChar);
         if (place > 3)
         {
             if (temp32bitint.byte[3] < 255)
+            {
                 temp32bitint.byte[3]++;
             }
+        }
         else
         {
             if (temp32bitint.byte[place - 1] < 255)
+            {
                 temp32bitint.byte[place - 1]++;
+            }
         }
         SetCharFishingAwardHistory(PChar, temp32bitint.integer);
     }
 }
 
-fish_ranking_listing * GetFishRankingListing(CCharEntity * PChar)
+fish_ranking_listing* GetFishRankingListing(CCharEntity* PChar)
 {
     if (PChar == nullptr)
+    {
         return nullptr;
-    fish_ranking_listing * char_data = new fish_ranking_listing();
-    fish_ranking_result * char_frr = nullptr;
+    }
+    fish_ranking_listing* char_data = new fish_ranking_listing();
+    fish_ranking_result* char_frr = nullptr;
     memset(char_data, 0, sizeof(fish_ranking_listing));
     memcpy(char_data->name, PChar->GetName(), 16);
     char_data->mjob = (uint8)PChar->GetMJob();
@@ -4047,11 +4285,13 @@ fish_ranking_listing * GetFishRankingListing(CCharEntity * PChar)
     return char_data;
 }
 
-bool SubmitFishRankingFish(CCharEntity * PChar, CItemFish * Fish)
+bool SubmitFishRankingFish(CCharEntity* PChar, CItemFish* Fish)
 {
     if (PChar == nullptr)
+    {
         return false;
-    fish_ranking_result * frr = new fish_ranking_result();
+    }
+    auto* frr = new fish_ranking_result();
     frr->charid = PChar->id;
     frr->mJob = PChar->GetMJob();
     frr->sJob = PChar->GetSJob();
